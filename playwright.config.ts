@@ -1,8 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests against a real cinc-server-ng. Run them with `make e2e`
-// (scripts/e2e.sh), which boots the server, exports the dashboard's env, and
-// calls Playwright; this file alone does not start a Cinc server.
+// (scripts/e2e.sh), which boots cinc-server-ng and a throwaway Postgres,
+// applies migrations, seeds the dashboard accounts the suite logs in as, and
+// only then builds and starts the dashboard itself -- unlike a typical
+// Playwright setup, the server isn't started here via `webServer`, since
+// account seeding has to happen between "the app has booted once and
+// auto-registered the server" and "tests start running," which `webServer`
+// has no hook for. This file alone does not start anything.
 const port = Number(process.env.E2E_PORT ?? 3100);
 // localhost, not 127.0.0.1: Chromium treats it as a secure context, so the
 // production session cookie (Secure by default) is stored over plain HTTP.
@@ -24,15 +29,4 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    // A production build, not `next dev`: the CSP drops 'unsafe-eval' and the
-    // session cookie is Secure only in production. (`next start` warns that
-    // it isn't the standalone server the image runs; the app code is the same.)
-    command: `pnpm build && pnpm start --port ${port}`,
-    url: `${baseURL}/api/healthz`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 240_000,
-    stdout: process.env.CI ? "pipe" : "ignore",
-    stderr: "pipe",
-  },
 });

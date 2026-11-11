@@ -1,19 +1,22 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN, ORG, alert, login } from "./helpers";
+import { ADMIN, alert, login, orgPath } from "./helpers";
 
-// Every step is a webui-signed request impersonating anna, verified and
-// ACL-checked by the real server: create (POST), edit (PUT), delete (DELETE).
+// Every step is a request signed as the registered server's shared
+// impersonation identity (an admin-level actor on cinc-server-ng), gated
+// only by e2e-admin's platform_admin role grant in the dashboard's own
+// database -- verified end to end: create (POST), edit (PUT), delete
+// (DELETE), each round-tripped through the real server.
 test("an admin creates, edits, and deletes a node", async ({ page }) => {
   const name = `e2e-node-${Date.now()}`;
   await login(page, ADMIN);
 
   // Create
-  await page.goto(`/orgs/${ORG}/nodes`);
+  await page.goto(orgPath("nodes"));
   await page.getByRole("link", { name: "New" }).click();
   await expect(page.getByRole("heading", { name: "New node" })).toBeVisible();
   await page.getByLabel("Name").fill(name);
   await page.getByRole("button", { name: "Create" }).click();
-  await expect(page).toHaveURL(new RegExp(`/orgs/${ORG}/nodes/${name}$`));
+  await expect(page).toHaveURL(new RegExp(`${orgPath("nodes", name)}$`));
   await expect(page.getByRole("heading", { name })).toBeVisible();
 
   // Edit: change the node's normal attributes through the JSON editor.
@@ -41,12 +44,12 @@ test("an admin creates, edits, and deletes a node", async ({ page }) => {
   const dialog = page.getByRole("dialog", { name: `Delete ${name}?` });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Delete" }).click();
-  await expect(page).toHaveURL(new RegExp(`/orgs/${ORG}/nodes$`));
+  await expect(page).toHaveURL(new RegExp(`${orgPath("nodes")}$`));
   await expect(page.getByRole("link", { name: "seed-web01" })).toBeVisible();
   await expect(page.getByRole("link", { name })).toHaveCount(0);
 
   // And the server agrees it is gone.
-  await page.goto(`/orgs/${ORG}/nodes/${name}`);
+  await page.goto(orgPath("nodes", name));
   await expect(
     page.getByText("This no longer exists, or you don't have access to it."),
   ).toBeVisible();

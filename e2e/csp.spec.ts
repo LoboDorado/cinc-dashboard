@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN, ORG, login } from "./helpers";
+import { ADMIN, SERVER, login, orgPath } from "./helpers";
 
 // The CSP nonce only works if every page renders dynamically (see proxy.ts and
 // app/layout.tsx). A prerendered page ships scripts without the nonce, the
@@ -37,22 +37,35 @@ test.beforeEach(async ({ page }) => {
 });
 
 const pages = [
-  "/orgs",
-  `/orgs/${ORG}`,
-  `/orgs/${ORG}/nodes`,
-  `/orgs/${ORG}/nodes/seed-web01`,
-  `/orgs/${ORG}/roles`,
-  `/orgs/${ORG}/roles/base`,
-  `/orgs/${ORG}/environments`,
-  `/orgs/${ORG}/data_bags`,
-  `/orgs/${ORG}/clients`,
-  `/orgs/${ORG}/cookbooks`,
-  `/orgs/${ORG}/policies`,
-  `/orgs/${ORG}/members`,
+  "/servers",
+  `/servers/${SERVER}/orgs`,
+  orgPath(),
+  orgPath("nodes"),
+  orgPath("nodes", "seed-web01"),
+  orgPath("roles"),
+  orgPath("roles", "base"),
+  orgPath("environments"),
+  orgPath("data_bags"),
+  orgPath("clients"),
+  orgPath("cookbooks"),
+  orgPath("policies"),
+  orgPath("members"),
   "/profile",
+  "/admin",
+  "/admin/servers",
+  "/admin/collectors",
+  "/admin/accounts",
+  "/admin/audit",
+  `/servers/${SERVER}/admin/roles`,
+  `/servers/${SERVER}/admin/audit`,
+  orgPath("admin", "roles"),
+  orgPath("admin", "audit"),
 ];
 
 test("main pages load with no CSP violations or console errors", async ({ page }) => {
+  // ~20 routes, each waiting for networkidle, comfortably exceeds the
+  // project-wide default timeout on its own.
+  test.setTimeout(60_000);
   const problems = watch(page);
 
   await page.goto("/login");
