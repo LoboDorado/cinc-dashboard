@@ -9,6 +9,7 @@ with the same defaults and hardening:
 | ConfigMap | `cinc-dashboard.env` |
 | Secret | `./secrets/*`, mounted as Compose secrets |
 | Ingress | optional `caddy` service (`proxy` profile) terminating TLS |
+| *(not bundled — see below)* | `postgres` service, plus a one-shot `migrate` service that applies the schema |
 
 Requires Docker Engine with the Compose v2 plugin. All commands below run from
 this directory.
@@ -22,14 +23,19 @@ cp .env.example .env                            # optional: bind address, Caddy 
 
 `CINC_DASHBOARD_DATABASE_URL` points at a Postgres instance for the
 dashboard's own admin-plane data (accounts, registered servers/collectors,
-role grants, audit log) — not provided by this compose file. Point it at a
-Postgres you already run, and apply the schema once with
-`CINC_DASHBOARD_DATABASE_URL=… node scripts/migrate.mjs` from the repo root.
+role grants, audit log). `cinc-dashboard.env.example`'s default points at the
+bundled `postgres` service below, which `compose.yaml` starts and migrates
+automatically — fine for a single host or local dev. Point it at your own
+managed Postgres instead for anything you care about keeping (same choice
+the Helm chart makes by not bundling one), and remove the `postgres` and
+`migrate` service blocks from `compose.yaml`; either way the schema is
+applied once by the `migrate` service, or manually with
+`CINC_DASHBOARD_DATABASE_URL=… node scripts/migrate.mjs` from the repo root
+if you're not using it.
 
 Comment out a setting you don't need instead of leaving it empty: the app
 validates its configuration at boot, and an empty value is not the same as an
-unset one (`CINC_AUTH_ACTOR=` signs logins as an empty user,
-`SESSION_COOKIE_SECURE=` prevents startup).
+unset one (`SESSION_COOKIE_SECURE=` prevents startup).
 
 ## 2. Provide the secrets
 
@@ -77,14 +83,29 @@ docker compose up -d
 docker compose ps        # wait for "healthy"
 ```
 
-This runs the published image for this checkout's release,
-`ghcr.io/cinc-project/cinc-dashboard:<version>`. To pin another tag or a digest,
-set `CINC_DASHBOARD_IMAGE` in `.env`. To build the image from this checkout
-instead (local changes, a private npm registry), add `compose.build.yaml`:
+This starts `postgres`, waits for it to be healthy, runs `migrate` to apply
+the schema, then starts `cinc-dashboard`. It runs the published image for
+this checkout's release, `ghcr.io/cinc-project/cinc-dashboard:<version>`. To
+pin another tag or a digest, set `CINC_DASHBOARD_IMAGE` in `.env`. To build
+the image from this checkout instead (local changes, a private npm
+registry), add `compose.build.yaml` (which also builds `migrate` from the
+same checkout):
 
 ```bash
 docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ```
+
+There is no standing bootstrap admin: a brand-new install has no accounts,
+so first boot prints a one-time setup token to the logs instead.
+
+```bash
+docker compose logs cinc-dashboard | grep -A2 "no accounts exist yet"
+```
+
+Visit `/setup` with that token to create the first account, granted
+Platform Admin — the token stops working the moment the container restarts
+if it isn't used first. From there, add more servers, collectors, accounts,
+and role grants from the admin UI (`/admin`).
 
 ## TLS
 
@@ -158,6 +179,11 @@ point the route at `http://cinc-dashboard:3000`.
 
 ## Differences from the chart
 
+- Bundles a `postgres` service and a one-shot `migrate` service. The chart
+  deliberately doesn't bundle a database (simpler chart, avoids accidental
+  data loss from a bundled stateful pod) and expects an operator-provided
+  Postgres with the schema already applied; Compose is single-host already,
+  so bundling one here is a convenience.
 - One instance instead of two replicas. The app is stateless, so more
   instances work as long as they share the same `session_secret`.
 - Docker never restarts an unhealthy container on its own. To match the

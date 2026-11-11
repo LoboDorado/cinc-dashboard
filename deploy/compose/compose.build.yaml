@@ -1,9 +1,14 @@
 # Build cinc-dashboard from this checkout instead of running the published image:
 #   docker compose -f compose.yaml -f compose.build.yaml up -d --build
 # The localhost/ prefix keeps Compose from looking for a same-named image on
-# Docker Hub.
+# Docker Hub. "migrate" runs scripts/migrate.mjs from the same image, so it
+# needs the same override.
 services:
   cinc-dashboard:
+    image: localhost/cinc-dashboard:local
+    build:
+      context: ../..
+  migrate:
     image: localhost/cinc-dashboard:local
     build:
       context: ../..

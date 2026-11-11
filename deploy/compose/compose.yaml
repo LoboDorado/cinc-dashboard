@@ -5,6 +5,9 @@
 #   ConfigMap             -> cinc-dashboard.env (env_file)
 #   Secret                -> ./secrets/* (Compose secrets, mounted as files)
 #   Ingress (TLS)         -> service "caddy" (optional "proxy" profile)
+# Not in the chart (which deliberately doesn't bundle a database):
+#   "postgres" (the dashboard's own admin-plane data) and "migrate" (a
+#   one-shot that applies the schema, which "cinc-dashboard" waits on).
 #
 # See README.md in this directory for the setup steps. In short:
 #   cp cinc-dashboard.env.example cinc-dashboard.env   # then edit it
@@ -12,12 +15,63 @@
 #   docker compose up -d                            # dashboard on 127.0.0.1:3000
 #   docker compose --profile proxy up -d            # plus Caddy for TLS
 #
+# First boot prints a one-time setup token to the logs (no standing bootstrap
+# admin): docker compose logs cinc-dashboard | grep -A2 "no accounts exist
+# yet", then visit /setup with it to create the first account.
+#
 # That runs the published release. To build this checkout instead, add
 # compose.build.yaml: docker compose -f compose.yaml -f compose.build.yaml up -d --build
 
 name: cinc-dashboard
 
 services:
+  # Local/dev-parity Postgres for the dashboard's own admin-plane data
+  # (accounts, registered servers/collectors, role grants, audit log) --
+  # unrelated to cinc-collector's own database. The Helm chart deliberately
+  # does NOT bundle one (simpler chart, avoids accidental data loss from a
+  # bundled stateful pod); Compose is single-host already, so bundling one
+  # here is a convenience, not a requirement. Point CINC_DASHBOARD_DATABASE_URL
+  # at your own managed Postgres instead for anything you care about keeping,
+  # and remove this service and "migrate" below.
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      # Matches the default CINC_DASHBOARD_DATABASE_URL in
+      # cinc-dashboard.env.example. Change both together if this host isn't
+      # trusted -- this password isn't a Compose secret, since it's only
+      # reachable from other containers on this project's own network, never
+      # published to the host.
+      POSTGRES_USER: cinc_dashboard
+      POSTGRES_PASSWORD: cinc_dashboard
+      POSTGRES_DB: cinc_dashboard
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinc_dashboard -d cinc_dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # One-shot: applies lib/db/migrations/ once, then exits. cinc-dashboard
+  # waits for this to succeed before it starts (below) -- there's no
+  # standing bootstrap admin, so a schema that doesn't exist yet would fail
+  # every request, not just degrade gracefully.
+  migrate:
+    image: ${CINC_DASHBOARD_IMAGE:-ghcr.io/cinc-project/cinc-dashboard:0.9.0}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./cinc-dashboard.env
+    command: ["node", "scripts/migrate.mjs"]
+
   cinc-dashboard:
     # The published release matching this checkout (bumped by
     # scripts/set-version.mjs at release time). Set CINC_DASHBOARD_IMAGE in .env
@@ -26,6 +80,9 @@ services:
 
     restart: unless-stopped
     init: true # tini as PID 1, for clean signal handling and zombie reaping
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
     # Same hardening as the chart's securityContext.
     user: "1000:1000"
@@ -160,5 +217,6 @@ secrets:
   #   file: ./secrets/ldap_bind_password
 
 volumes:
+  postgres_data:
   caddy_data:
   caddy_config:

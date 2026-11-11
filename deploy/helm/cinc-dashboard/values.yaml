@@ -11,8 +11,9 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# -- Connection to the Cinc/Chef Infra Server. The server's root URL, without
-# a /organizations/<org> path (unlike a client's chef_server_url).
+# -- Cinc/Chef Infra Server to auto-register on first boot (its root URL,
+# without a /organizations/<org> path). Only seeds that one server's row in
+# the registry -- add more servers afterward from the admin UI.
 cincServerUrl: "" # e.g. https://chef.example.com  (REQUIRED)
 # Skip TLS verification of the cinc server (dev only).
 sslNoVerify: false
@@ -27,18 +28,18 @@ nodeEnv: "production"
 # plain-HTTP deployment: the flag is never inferred from request headers, because
 # X-Forwarded-Proto is attacker-supplied unless every path to the pod strips it.
 cookieSecure: ""
-# Signing actor for POST /authenticate_user. This endpoint is global (non-org)
-# and its ACL only grants "create" to globally-privileged actors. Set this to
-# "pivotal" (or another global admin) so the webui-signed request is accepted.
-# Leave empty to sign as the authenticating user (works only if that user has
-# global create permission, which org users typically do not).
+# Shared impersonation username for the auto-registered server above -- every
+# dashboard-mediated request to it signs as this one existing Chef/Cinc
+# username, regardless of which dashboard account triggered it. Defaults to
+# "pivotal" if left empty; review it in the admin UI's Servers section before
+# relying on it for anything real.
 authActor: "pivotal"
 
-# -- How login credentials are verified: "local" (default) asks the Cinc
-# server's own /authenticate_user; "ldap" binds against an external
-# directory instead. Either way, the submitted username must already exist
-# as a Cinc user object - LDAP only replaces the password check, it never
-# provisions Cinc users.
+# -- How a *dashboard* account's password is checked: "local" (default,
+# scrypt) or "ldap" (bind against an external directory instead). Either way
+# the submitted username must already exist as a dashboard account -- LDAP
+# only replaces the password check, it never creates one. Dashboard accounts
+# are decoupled from any Cinc Server's own users.
 authMode: "local" # "local" or "ldap"
 
 # -- LDAP bind authentication. Only used when authMode is "ldap".
