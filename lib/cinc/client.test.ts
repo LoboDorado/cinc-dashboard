@@ -14,6 +14,14 @@ vi.mock("../config", () => ({
 const audit = vi.fn();
 vi.mock("../db/audit", () => ({ recordAudit: (...a: unknown[]) => audit(...a) }));
 
+// client.ts calls undici's own fetch, not the global one (see its comment on
+// why), so the mock has to replace undici's export rather than stub a global.
+const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
+vi.mock("undici", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("undici")>()),
+  fetch: fetchMock,
+}));
+
 import { cincRequest } from "./client";
 import { cincPath, type CincPath } from "./path";
 import type { AuthorizedActionContext } from "../admin/access";
@@ -33,19 +41,17 @@ function fakeCtx(overrides: Partial<AuthorizedActionContext> = {}): AuthorizedAc
 }
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  fetchMock.mockReset();
   audit.mockClear();
 });
 
 test("signs as the context's impersonation identity, with web source", async () => {
-  const fetchMock = vi.fn<typeof fetch>(
-    async () =>
-      new Response(JSON.stringify({ ok: 1 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ ok: 1 }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
   );
-  vi.stubGlobal("fetch", fetchMock);
   const out = await cincRequest<{ ok: number }>(fakeCtx(), {
     method: "GET",
     path: cincPath`/nodes`,
@@ -60,10 +66,7 @@ test("signs as the context's impersonation identity, with web source", async () 
 });
 
 test("records a success audit entry attributed to the real dashboard account", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })),
-  );
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
   await cincRequest(fakeCtx(), { method: "GET", path: cincPath`/nodes` });
   expect(audit).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -79,10 +82,7 @@ test("records a success audit entry attributed to the real dashboard account", a
 });
 
 test("throws CincError with status on non-2xx, and audits it as an error", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response("denied", { status: 403 })),
-  );
+  fetchMock.mockResolvedValueOnce(new Response("denied", { status: 403 }));
   await expect(
     cincRequest(fakeCtx(), { method: "GET", path: cincPath`/nodes` }),
   ).rejects.toMatchObject({ status: 403, forbidden: true });
@@ -95,10 +95,7 @@ function failedRequestLog(spy: { mock: { calls: unknown[][] } }) {
 }
 
 test("a failed request logs the shared identity as actor and the real account as user", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response("denied", { status: 403 })),
-  );
+  fetchMock.mockResolvedValueOnce(new Response("denied", { status: 403 }));
   const spy = vi.spyOn(console, "log").mockImplementation(() => {});
   await expect(
     cincRequest(fakeCtx({ impersonationUsername: "pivotal", onBehalfOf: "alice" }), {
@@ -116,10 +113,7 @@ test("a failed request logs the shared identity as actor and the real account as
 });
 
 test("refuses to sign a path a name has broken out of", async () => {
-  const fetchMock = vi.fn(
-    async () => new Response(JSON.stringify({}), { status: 200 }),
-  );
-  vi.stubGlobal("fetch", fetchMock);
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
 
   // `/orgs/acme/nodes/web01%2F_acl` reaches an action as the name "web01/_acl".
   // Concatenated it is indistinguishable from the ACL endpoint acl.ts builds, so
@@ -155,10 +149,7 @@ test("refuses to sign a path a name has broken out of", async () => {
 });
 
 test("omits the org prefix for top-level paths", async () => {
-  const fetchMock = vi.fn<typeof fetch>(
-    async () => new Response(JSON.stringify({}), { status: 200 }),
-  );
-  vi.stubGlobal("fetch", fetchMock);
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
   await cincRequest(fakeCtx({ org: undefined }), {
     method: "POST",
     path: cincPath`/authenticate_user`,

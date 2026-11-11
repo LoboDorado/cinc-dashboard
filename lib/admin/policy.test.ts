@@ -109,6 +109,19 @@ test("a broader grant satisfies a narrower scope check even without an exact org
   expect(canAccessScope(grants, SERVER_B)).toBe(false);
 });
 
+test("an org-only grant still reaches its server's namespace when no specific org is asked about", () => {
+  // Regression: app/servers/[server]/layout.tsx calls canAccessScope with no
+  // org before any org is chosen (the server root / org picker). An account
+  // whose only grant is scoped to one org on that server must still pass
+  // this gate on its way to that org -- a 404 here would lock it out
+  // entirely, not just restrict it to its own org.
+  const grants = [grant({ role: "org_viewer", serverId: SERVER_A, org: "acme" })];
+  expect(canAccessScope(grants, SERVER_A)).toBe(true);
+  expect(canAccessScope(grants, SERVER_A, "acme")).toBe(true);
+  expect(canAccessScope(grants, SERVER_A, "other-org")).toBe(false);
+  expect(canAccessScope(grants, SERVER_B)).toBe(false);
+});
+
 test("isScopeAdmin is true for platform/server/org admin tiers covering the scope, false for anything else", () => {
   expect(isScopeAdmin([grant({ role: "platform_admin" })], SERVER_A, "acme")).toBe(true);
   expect(isScopeAdmin([grant({ role: "server_admin", serverId: SERVER_A })], SERVER_A, "acme")).toBe(

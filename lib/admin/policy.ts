@@ -96,8 +96,13 @@ export function canAccessObject(
 function grantCoversScope(grant: RoleGrant, serverId: string, org?: string): boolean {
   if (grant.role === "platform_admin" || grant.role === "platform_read_only") return true;
   if (grant.serverId !== serverId) return false;
-  if (grant.org === null) return true; // a server-scope role covers every org on that server
-  return org !== undefined && grant.org === org;
+  // No specific org asked about (the server picker, or the app/servers/[server]
+  // layout gate before any org is chosen) -- any grant touching this server at
+  // all, even one scoped to a single org on it, makes the server's namespace
+  // reachable. An org-only account still has to pass this gate on its way to
+  // its own org, which is the only place the narrower per-org check applies.
+  if (org === undefined) return true;
+  return grant.org === null || grant.org === org;
 }
 
 /**

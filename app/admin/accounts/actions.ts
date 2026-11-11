@@ -44,17 +44,21 @@ export async function createLdapAccountAction(
  * platform-scope slice of it. lib/admin/grants.ts re-checks the delegation
  * cap itself against the real scope, so a stale/forged scope from the client
  * can't grant more than the signed-in account is actually allowed to.
+ *
+ * Takes its target-account-dependent args pre-bound (`.bind(null,
+ * targetAccountId)`) rather than closing over them in an inline arrow
+ * function at the call site: a Server Component can only pass a Client
+ * Component a server action's own reference or a `.bind()` of one -- a plain
+ * closure wrapping a call to it isn't serializable across that boundary.
  */
 export async function grantRoleAction(
   targetAccountId: string,
-  role: Role,
-  scope: GrantScope,
-  objectTypes: ObjectType[] = [],
+  input: { role: Role; scope: GrantScope; objectTypes: ObjectType[] },
 ): Promise<ActionResult> {
   const accountId = await currentAccountId();
   return runAction(
     async () => {
-      await createRoleGrant(accountId, targetAccountId, role, scope, objectTypes);
+      await createRoleGrant(accountId, targetAccountId, input.role, input.scope, input.objectTypes);
     },
     { revalidate: `/admin/accounts/${targetAccountId}` },
   );

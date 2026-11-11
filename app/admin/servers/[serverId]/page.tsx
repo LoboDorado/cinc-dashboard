@@ -22,7 +22,7 @@ export default async function EditServerPage({
       />
       <ServerForm
         initial={server}
-        onSubmit={(values) => updateServerAction(serverId, values)}
+        onSubmit={updateServerAction.bind(null, serverId)}
         submitLabel="Save"
       />
     </div>

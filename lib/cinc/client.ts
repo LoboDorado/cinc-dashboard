@@ -7,7 +7,7 @@
 // this module. This module must never be imported into a Client Component —
 // it holds decrypted webui keys.
 import "server-only";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
 import type { AuthorizedActionContext } from "../admin/access";
 import { getConfig } from "../config";
 import { recordAudit } from "../db/audit";
@@ -27,6 +27,14 @@ import { log } from "../log";
 // cheap to keep around for the life of the process; there's no eviction
 // because registered servers are expected to number in the dozens, not
 // thousands.
+//
+// Requests below use undici's own `fetch`, not the global one: Node's
+// built-in fetch is backed by whatever undici version ships inside that
+// Node release, which can differ from this project's own `undici`
+// dependency. Handing a `dispatcher` built from one version to the other's
+// fetch crashes deep inside undici's request-handler validation
+// (`InvalidArgumentError: invalid onRequestStart method`) -- using undici's
+// fetch keeps the Agent and the fetch implementation on the same version.
 const dispatchers = new Map<string, Agent>();
 
 function dispatcherFor(ctx: AuthorizedActionContext): Agent | undefined {
@@ -124,12 +132,12 @@ export async function cincRequest<T>(
       ).toString()
     : "";
 
-  const res = await fetch(ctx.serverUrl + fullPath + qs, {
+  const res = await undiciFetch(ctx.serverUrl + fullPath + qs, {
     method: opts.method,
     headers,
     body: opts.body === undefined ? undefined : bodyStr,
     dispatcher: dispatcherFor(ctx),
-  } as RequestInit);
+  });
   const text = await res.text();
   const parsed = text ? safeJson(text) : null;
 

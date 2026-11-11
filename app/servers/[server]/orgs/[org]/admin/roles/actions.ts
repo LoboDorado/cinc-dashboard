@@ -14,21 +14,24 @@ import { runAction, type ActionResult } from "@/lib/cinc/action";
  * out Org Admin itself. Scope is entirely fixed to this one org;
  * lib/admin/grants.ts re-checks the delegation cap regardless of what the
  * client sent.
+ *
+ * Takes `server`/`org` pre-bound (`.bind(null, server, org)`) rather than
+ * closing over them in an inline arrow function at the call site: a Server
+ * Component can only pass a Client Component a server action's own
+ * reference or a `.bind()` of one, not a plain closure wrapping a call to it.
  */
 export async function grantRoleToUsernameAction(
   server: string,
   org: string,
-  targetUsername: string,
-  role: Role,
-  objectTypes: ObjectType[] = [],
+  input: { target: string; role: Role; objectTypes: ObjectType[] },
 ): Promise<ActionResult> {
   const accountId = await currentAccountId();
-  const target = await getAccountByUsername(targetUsername);
-  if (!target) return { error: `no dashboard account named "${targetUsername}"` };
+  const target = await getAccountByUsername(input.target);
+  if (!target) return { error: `no dashboard account named "${input.target}"` };
   const scope: GrantScope = { kind: "org", serverId: server, org };
   return runAction(
     async () => {
-      await createRoleGrant(accountId, target.id, role, scope, objectTypes);
+      await createRoleGrant(accountId, target.id, input.role, scope, input.objectTypes);
     },
     { revalidate: `/servers/${server}/orgs/${org}/admin/roles` },
   );

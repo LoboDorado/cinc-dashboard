@@ -29,7 +29,7 @@ export default async function EditCollectorPage({
       <CollectorForm
         initial={collector}
         allServers={servers}
-        onSubmit={(values) => updateCollectorAction(collectorId, values)}
+        onSubmit={updateCollectorAction.bind(null, collectorId)}
         submitLabel="Save"
       />
     </div>

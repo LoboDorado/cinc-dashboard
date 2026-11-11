@@ -28,9 +28,7 @@ export default async function NewOrgRoleGrantPage({
         scopeKinds={["org"]}
         fixedServerId={server}
         fixedOrg={org}
-        onSubmit={(values) =>
-          grantRoleToUsernameAction(server, org, values.target, values.role, values.objectTypes)
-        }
+        onSubmit={grantRoleToUsernameAction.bind(null, server, org)}
         cancelHref={`/servers/${server}/orgs/${org}/admin/roles`}
       />
     </div>

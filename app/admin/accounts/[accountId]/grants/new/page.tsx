@@ -41,7 +41,7 @@ export default async function NewGrantPage({
         rolesForScope={rolesForScope}
         fixedTargetAccountId={accountId}
         onListOrgs={listOrgsForServerAction}
-        onSubmit={(values) => grantRoleAction(accountId, values.role, values.scope, values.objectTypes)}
+        onSubmit={grantRoleAction.bind(null, accountId)}
         cancelHref={`/admin/accounts/${accountId}`}
       />
     </div>

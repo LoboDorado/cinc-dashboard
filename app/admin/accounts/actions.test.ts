@@ -74,16 +74,20 @@ test("createLdapAccountAction passes the DN through", async () => {
 
 test("grantRoleAction delegates to createRoleGrant with the granter, target, role, scope, and object types", async () => {
   const scope = { kind: "server" as const, serverId: "s1" };
-  await expect(grantRoleAction("target-1", "server_object_manager", scope, ["nodes"])).resolves.toEqual({
-    ok: true,
-  });
+  await expect(
+    grantRoleAction("target-1", { role: "server_object_manager", scope, objectTypes: ["nodes"] }),
+  ).resolves.toEqual({ ok: true });
   expect(createRoleGrant).toHaveBeenCalledWith("acct-1", "target-1", "server_object_manager", scope, ["nodes"]);
 });
 
 test("grantRoleAction maps a delegation-cap denial to forbidden", async () => {
   const { DelegationDeniedError } = await import("@/lib/admin/grants");
   createRoleGrant.mockRejectedValueOnce(new DelegationDeniedError());
-  const result = await grantRoleAction("target-1", "platform_admin", { kind: "platform" });
+  const result = await grantRoleAction("target-1", {
+    role: "platform_admin",
+    scope: { kind: "platform" },
+    objectTypes: [],
+  });
   expect(result).toEqual({ error: "forbidden" });
 });
 

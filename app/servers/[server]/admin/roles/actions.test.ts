@@ -33,14 +33,19 @@ test("grantRoleToUsernameAction resolves the username and grants on their behalf
   getAccountByUsername.mockResolvedValueOnce({ id: "target-1", username: "bob" });
   const scope = { kind: "server" as const, serverId: "s1" };
   await expect(
-    grantRoleToUsernameAction("s1", "bob", "server_object_manager", scope, ["nodes"]),
+    grantRoleToUsernameAction("s1", { target: "bob", role: "server_object_manager", scope, objectTypes: ["nodes"] }),
   ).resolves.toEqual({ ok: true });
   expect(createRoleGrant).toHaveBeenCalledWith("acct-1", "target-1", "server_object_manager", scope, ["nodes"]);
 });
 
 test("grantRoleToUsernameAction reports an unknown username without touching createRoleGrant", async () => {
   getAccountByUsername.mockResolvedValueOnce(null);
-  const result = await grantRoleToUsernameAction("s1", "nobody", "server_viewer", { kind: "server", serverId: "s1" });
+  const result = await grantRoleToUsernameAction("s1", {
+    target: "nobody",
+    role: "server_viewer",
+    scope: { kind: "server", serverId: "s1" },
+    objectTypes: [],
+  });
   expect(result).toEqual({ error: 'no dashboard account named "nobody"' });
   expect(createRoleGrant).not.toHaveBeenCalled();
 });
@@ -49,7 +54,12 @@ test("grantRoleToUsernameAction maps a delegation-cap denial to forbidden", asyn
   getAccountByUsername.mockResolvedValueOnce({ id: "target-1", username: "bob" });
   const { DelegationDeniedError } = await import("@/lib/admin/grants");
   createRoleGrant.mockRejectedValueOnce(new DelegationDeniedError());
-  const result = await grantRoleToUsernameAction("s1", "bob", "server_admin", { kind: "server", serverId: "s1" });
+  const result = await grantRoleToUsernameAction("s1", {
+    target: "bob",
+    role: "server_admin",
+    scope: { kind: "server", serverId: "s1" },
+    objectTypes: [],
+  });
   expect(result).toEqual({ error: "forbidden" });
 });
 
