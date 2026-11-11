@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { currentAccount } from "@/lib/guard";
-import { requireScopeAccess, listReachableOrgs, listReachableServers } from "@/lib/admin/access";
+import {
+  requireScopeAccess,
+  listReachableOrgs,
+  listReachableServers,
+  isPlatformMemberAccount,
+} from "@/lib/admin/access";
 import { AppShell } from "@/components/app-shell";
 import { APP_VERSION } from "@/lib/version";
 
@@ -22,9 +27,10 @@ export default async function OrgLayout({
     notFound();
   }
 
-  const [orgs, servers] = await Promise.all([
+  const [orgs, servers, isPlatformMember] = await Promise.all([
     listReachableOrgs(account.id, server),
     listReachableServers(account.id),
+    isPlatformMemberAccount(account.id),
   ]);
 
   return (
@@ -34,6 +40,7 @@ export default async function OrgLayout({
       org={org}
       orgs={orgs}
       displayName={account.displayName}
+      isPlatformMember={isPlatformMember}
       version={APP_VERSION}
     >
       {children}

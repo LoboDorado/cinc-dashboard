@@ -6,6 +6,9 @@ import {
   canAccessScope,
   canViewAssignments,
   isScopeAdmin,
+  isPlatformAdmin,
+  isPlatformMember,
+  grantableRoles,
   type RoleGrant,
 } from "./policy";
 
@@ -127,6 +130,67 @@ test("isScopeAdmin is true for platform/server/org admin tiers covering the scop
   expect(isScopeAdmin([grant({ role: "server_viewer", serverId: SERVER_A })], SERVER_A, "acme")).toBe(
     false,
   );
+});
+
+test("isPlatformAdmin/isPlatformMember distinguish the two platform tiers", () => {
+  expect(isPlatformAdmin([grant({ role: "platform_admin" })])).toBe(true);
+  expect(isPlatformAdmin([grant({ role: "platform_read_only" })])).toBe(false);
+  expect(isPlatformMember([grant({ role: "platform_admin" })])).toBe(true);
+  expect(isPlatformMember([grant({ role: "platform_read_only" })])).toBe(true);
+  expect(isPlatformMember([grant({ role: "server_admin", serverId: SERVER_A })])).toBe(false);
+});
+
+// -- grantableRoles --
+
+test("a platform_admin can grant anything at any scope", () => {
+  const grants = [grant({ role: "platform_admin" })];
+  expect(grantableRoles(grants, { kind: "platform" })).toEqual([
+    "platform_admin",
+    "platform_read_only",
+  ]);
+  expect(grantableRoles(grants, { kind: "server", serverId: SERVER_A })).toEqual([
+    "server_admin",
+    "server_object_manager",
+    "server_viewer",
+  ]);
+  expect(grantableRoles(grants, { kind: "org", serverId: SERVER_A, org: "acme" })).toEqual([
+    "org_admin",
+    "org_object_manager",
+    "org_viewer",
+  ]);
+});
+
+test("a server_admin can grant server/org roles on their own server, but no platform role and no peer server_admin", () => {
+  const grants = [grant({ role: "server_admin", serverId: SERVER_A })];
+  expect(grantableRoles(grants, { kind: "platform" })).toEqual([]);
+  const serverGrantable = grantableRoles(grants, { kind: "server", serverId: SERVER_A });
+  expect(serverGrantable).toEqual(["server_object_manager", "server_viewer"]);
+  expect(serverGrantable).not.toContain("server_admin");
+  expect(grantableRoles(grants, { kind: "org", serverId: SERVER_A, org: "acme" })).toEqual([
+    "org_admin",
+    "org_object_manager",
+    "org_viewer",
+  ]);
+  // No authority at all on a different server.
+  expect(grantableRoles(grants, { kind: "server", serverId: SERVER_B })).toEqual([]);
+});
+
+test("an org_admin can grant org roles in their own org only, never org_admin itself", () => {
+  const grants = [grant({ role: "org_admin", serverId: SERVER_A, org: "acme" })];
+  const orgGrantable = grantableRoles(grants, { kind: "org", serverId: SERVER_A, org: "acme" });
+  expect(orgGrantable).toEqual(["org_object_manager", "org_viewer"]);
+  expect(orgGrantable).not.toContain("org_admin");
+  expect(grantableRoles(grants, { kind: "server", serverId: SERVER_A })).toEqual([]);
+  expect(grantableRoles(grants, { kind: "org", serverId: SERVER_A, org: "other-org" })).toEqual([]);
+});
+
+test("an object manager or viewer can delegate nothing", () => {
+  const grants = [
+    grant({ role: "server_object_manager", serverId: SERVER_A, objectTypes: ["nodes"] }),
+    grant({ role: "org_viewer", serverId: SERVER_A, org: "acme" }),
+  ];
+  expect(grantableRoles(grants, { kind: "server", serverId: SERVER_A })).toEqual([]);
+  expect(grantableRoles(grants, { kind: "org", serverId: SERVER_A, org: "acme" })).toEqual([]);
 });
 
 test("multiple grants on the same account combine additively", () => {

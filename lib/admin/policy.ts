@@ -144,3 +144,52 @@ export function isScopeAdmin(grants: readonly RoleGrant[], serverId: string, org
     return false;
   });
 }
+
+/** True if any of `grants` is `platform_admin` -- gates the platform admin area's write actions. */
+export function isPlatformAdmin(grants: readonly RoleGrant[]): boolean {
+  return grants.some((g) => g.role === "platform_admin");
+}
+
+/** True if any of `grants` is `platform_admin` or `platform_read_only` -- gates the platform admin area's read access. */
+export function isPlatformMember(grants: readonly RoleGrant[]): boolean {
+  return grants.some((g) => g.role === "platform_admin" || g.role === "platform_read_only");
+}
+
+/** The scope a new role grant targets -- fixes which roles are even eligible. */
+export type GrantScope =
+  | { kind: "platform" }
+  | { kind: "server"; serverId: string }
+  | { kind: "org"; serverId: string; org: string };
+
+/**
+ * Which roles `granterGrants` is allowed to grant at `scope`, per the
+ * delegation table: Platform Admin grants anything, anywhere; a Server Admin
+ * grants Server Object Manager/Viewer and any org-level role on their own
+ * server; an Org Admin grants Org Object Manager/Viewer within their own org.
+ * Delegation is always capped one tier below the granter's own level --
+ * creating a peer at the granter's own tier always requires a Platform
+ * Admin. Returns `[]` (nothing grantable) rather than throwing; callers
+ * decide how to report that.
+ */
+export function grantableRoles(granterGrants: readonly RoleGrant[], scope: GrantScope): Role[] {
+  if (isPlatformAdmin(granterGrants)) {
+    if (scope.kind === "platform") return ["platform_admin", "platform_read_only"];
+    if (scope.kind === "server") return ["server_admin", "server_object_manager", "server_viewer"];
+    return ["org_admin", "org_object_manager", "org_viewer"];
+  }
+  if (scope.kind === "platform") return []; // only a Platform Admin grants platform-scope roles
+
+  const isServerAdminHere = granterGrants.some(
+    (g) => g.role === "server_admin" && g.serverId === scope.serverId,
+  );
+  if (scope.kind === "server") {
+    return isServerAdminHere ? ["server_object_manager", "server_viewer"] : [];
+  }
+
+  // scope.kind === "org"
+  if (isServerAdminHere) return ["org_admin", "org_object_manager", "org_viewer"];
+  const isOrgAdminHere = granterGrants.some(
+    (g) => g.role === "org_admin" && g.serverId === scope.serverId && g.org === scope.org,
+  );
+  return isOrgAdminHere ? ["org_object_manager", "org_viewer"] : [];
+}

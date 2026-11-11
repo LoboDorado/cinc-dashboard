@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { currentAccount } from "@/lib/guard";
+import { isPlatformMemberAccount } from "@/lib/admin/access";
 import { UserMenu } from "@/components/user-menu";
 import { SiteFooter } from "@/components/site-footer";
 import { APP_VERSION } from "@/lib/version";
@@ -8,6 +9,7 @@ import { ProfileForm } from "./profile-form";
 
 export default async function ProfilePage() {
   const account = await currentAccount();
+  const isPlatformMember = await isPlatformMemberAccount(account.id);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -27,7 +29,7 @@ export default async function ProfilePage() {
           />
           <span className="text-text">dashboard</span>
         </Link>
-        <UserMenu name={account.displayName} />
+        <UserMenu name={account.displayName} isPlatformMember={isPlatformMember} />
       </header>
 
       <div className="mx-auto max-w-xl p-6">

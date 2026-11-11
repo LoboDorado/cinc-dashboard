@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { currentAccount } from "@/lib/guard";
-import { requireScopeAccess, listReachableOrgs } from "@/lib/admin/access";
+import { isPlatformMemberAccount, requireScopeAccess, listReachableOrgs } from "@/lib/admin/access";
 import { Card } from "@/components/ui/card";
 import { UserMenu } from "@/components/user-menu";
 import { SiteFooter } from "@/components/site-footer";
@@ -27,6 +27,8 @@ export default async function ServerOrgsPage({
     redirect(`/servers/${server}/orgs/${orgs[0].name}`);
   }
 
+  const isPlatformMember = await isPlatformMemberAccount(account.id);
+
   return (
     <div className="flex min-h-screen flex-col">
     <main className="flex-1">
@@ -42,7 +44,7 @@ export default async function ServerOrgsPage({
           />
           <span className="text-text">dashboard</span>
         </div>
-        <UserMenu name={account.displayName} />
+        <UserMenu name={account.displayName} isPlatformMember={isPlatformMember} />
       </header>
 
       <div className="mx-auto max-w-3xl p-6">

@@ -24,10 +24,12 @@ export function MobileNav({
   server,
   org,
   displayName,
+  isPlatformMember = false,
 }: {
   server: string;
   org: string;
   displayName: string;
+  isPlatformMember?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -114,7 +116,7 @@ export function MobileNav({
                 <PrimaryNavLinks server={server} org={org} />
               </nav>
               <div className="border-t border-border px-4 py-3">
-                <UserMenu name={displayName} />
+                <UserMenu name={displayName} isPlatformMember={isPlatformMember} />
               </div>
             </div>
           </div>,

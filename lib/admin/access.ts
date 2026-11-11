@@ -12,6 +12,8 @@ import { listAllOrgs, type Org } from "../cinc/orgs";
 import {
   canAccessObject,
   canAccessScope,
+  isPlatformAdmin,
+  isPlatformMember,
   isScopeAdmin,
   type Action,
   type ObjectType,
@@ -47,7 +49,8 @@ type GrantRow = {
   object_types: string[] | null;
 };
 
-async function loadGrants(accountId: string): Promise<RoleGrant[]> {
+/** Exported for lib/admin/grants.ts, which needs a granter's own grants to compute `grantableRoles`. */
+export async function loadGrants(accountId: string): Promise<RoleGrant[]> {
   const { rows } = await getPool().query<GrantRow>(
     `SELECT g.role, g.server_id, g.org,
             array_remove(array_agg(ot.object_type), NULL) AS object_types
@@ -265,6 +268,30 @@ export async function requireScopeAdmin(
     org,
     [brand]: true,
   } as AuthorizedActionContext;
+}
+
+/** True if `accountId` can see (but not necessarily change) the platform admin area. */
+export async function isPlatformMemberAccount(accountId: string): Promise<boolean> {
+  return isPlatformMember(await loadGrants(accountId));
+}
+
+/** True if `accountId` can make changes in the platform admin area. */
+export async function isPlatformAdminAccount(accountId: string): Promise<boolean> {
+  return isPlatformAdmin(await loadGrants(accountId));
+}
+
+/** Throws AccessDeniedError (and audits the denial) unless `accountId` is platform_admin or platform_read_only. */
+export async function requirePlatformMember(accountId: string): Promise<void> {
+  if (await isPlatformMemberAccount(accountId)) return;
+  await recordAudit({ actorAccountId: accountId, actorUsername: accountId, action: "admin:platform", outcome: "denied" });
+  throw new AccessDeniedError();
+}
+
+/** Throws AccessDeniedError (and audits the denial) unless `accountId` is platform_admin. */
+export async function requirePlatformAdmin(accountId: string): Promise<void> {
+  if (await isPlatformAdminAccount(accountId)) return;
+  await recordAudit({ actorAccountId: accountId, actorUsername: accountId, action: "admin:platform_write", outcome: "denied" });
+  throw new AccessDeniedError();
 }
 
 /** Every registered server `accountId` can reach at all -- for the server picker. */

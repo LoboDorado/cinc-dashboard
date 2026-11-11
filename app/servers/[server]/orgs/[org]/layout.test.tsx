@@ -6,12 +6,19 @@ vi.mock("@/lib/guard", () => ({
   currentAccount: async () => ({ id: "acct-1", username: "alice", displayName: "Alice", authSource: "local" }),
 }));
 
-const { requireScopeAccess, listReachableOrgs, listReachableServers } = vi.hoisted(() => ({
-  requireScopeAccess: vi.fn(),
-  listReachableOrgs: vi.fn(),
-  listReachableServers: vi.fn(),
+const { requireScopeAccess, listReachableOrgs, listReachableServers, isPlatformMemberAccount } =
+  vi.hoisted(() => ({
+    requireScopeAccess: vi.fn(),
+    listReachableOrgs: vi.fn(),
+    listReachableServers: vi.fn(),
+    isPlatformMemberAccount: vi.fn(),
+  }));
+vi.mock("@/lib/admin/access", () => ({
+  requireScopeAccess,
+  listReachableOrgs,
+  listReachableServers,
+  isPlatformMemberAccount,
 }));
-vi.mock("@/lib/admin/access", () => ({ requireScopeAccess, listReachableOrgs, listReachableServers }));
 
 // notFound() throws in Next; mirror that with a recognizable sentinel.
 const NOT_FOUND = new Error("NEXT_NOT_FOUND");
@@ -35,6 +42,7 @@ beforeEach(() => {
   listReachableOrgs.mockReset();
   listReachableServers.mockReset();
   listReachableServers.mockResolvedValue([{ id: "s1", name: "Primary" }]);
+  isPlatformMemberAccount.mockReset().mockResolvedValue(false);
 });
 
 test("renders the shell for an org the account can reach", async () => {

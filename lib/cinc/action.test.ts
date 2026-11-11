@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { runAction, parseJsonObject } from "./action";
 import { CincError } from "./errors";
 import { AccessDeniedError } from "../admin/access";
+import { DelegationDeniedError } from "../admin/grants";
 
 test("runAction returns ok on success", async () => {
   expect(await runAction(async () => undefined)).toEqual({ ok: true });
@@ -18,6 +19,13 @@ test("runAction maps 403 to forbidden", async () => {
 test("runAction maps a role-grant denial to forbidden", async () => {
   const r = await runAction(async () => {
     throw new AccessDeniedError();
+  });
+  expect(r).toEqual({ error: "forbidden" });
+});
+
+test("runAction maps a delegation-cap denial to forbidden", async () => {
+  const r = await runAction(async () => {
+    throw new DelegationDeniedError();
   });
   expect(r).toEqual({ error: "forbidden" });
 });

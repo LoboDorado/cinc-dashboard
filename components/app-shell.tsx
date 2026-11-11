@@ -19,6 +19,7 @@ export function AppShell({
   org,
   orgs,
   displayName,
+  isPlatformMember = false,
   version,
   children,
 }: {
@@ -27,6 +28,7 @@ export function AppShell({
   org: string;
   orgs: Org[];
   displayName: string;
+  isPlatformMember?: boolean;
   version: string;
   children: ReactNode;
 }) {
@@ -42,7 +44,12 @@ export function AppShell({
       </a>
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-surface/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-          <MobileNav server={server} org={org} displayName={displayName} />
+          <MobileNav
+            server={server}
+            org={org}
+            displayName={displayName}
+            isPlatformMember={isPlatformMember}
+          />
           <Link
             href={`/servers/${server}/orgs`}
             className="flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight"
@@ -64,7 +71,7 @@ export function AppShell({
           <CommandPalette server={server} org={org} orgs={orgs} />
           {/* Below md the user menu lives in the MobileNav drawer. */}
           <div className="hidden md:block">
-            <UserMenu name={displayName} />
+            <UserMenu name={displayName} isPlatformMember={isPlatformMember} />
           </div>
         </div>
       </header>
