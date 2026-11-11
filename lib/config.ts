@@ -21,6 +21,18 @@ const schema = z.object({
   // Optional actor for POST /authenticate_user fallback when impersonated user gets 403
   CINC_AUTH_ACTOR: z.string().optional(),
 
+  // Postgres connection string for the dashboard's own admin-plane data
+  // (accounts, registered servers/collectors, role grants, audit log) --
+  // unrelated to cinc-collector's own SereneDB.
+  CINC_DASHBOARD_DATABASE_URL: z.string().optional(),
+  // Encrypts secrets at rest (registered servers' webui keys, registered
+  // collectors' bearer tokens) -- see lib/db/secretbox.ts. Provide inline OR
+  // via a file path (CINC_DASHBOARD_ENCRYPTION_KEY_FILE), same convention as
+  // SESSION_SECRET. Deliberately a separate key from SESSION_SECRET: rotating
+  // one shouldn't force re-encrypting the other.
+  CINC_DASHBOARD_ENCRYPTION_KEY: z.string().optional(),
+  CINC_DASHBOARD_ENCRYPTION_KEY_FILE: z.string().optional(),
+
   // How login credentials are verified. "local" (default) asks the Cinc
   // server's own /authenticate_user; "ldap" binds against an external
   // directory instead (see lib/ldap/client.ts). Either way, the submitted
@@ -67,6 +79,8 @@ export type Config = {
   cookieSecure?: boolean;
   chefVersion: string;
   authActor?: string;
+  dashboardDatabaseUrl: string;
+  dashboardEncryptionKey: string;
   authMode: "local" | "ldap";
   /** Present only when authMode === "ldap". */
   ldap?: LdapConfig;
@@ -77,7 +91,7 @@ function readPem(path: string, label: string): string {
     return readFileSync(path, "utf8");
   } catch (e) {
     throw new Error(
-      `Invalid cinc-console configuration — ${label} could not read ${path}: ${(e as Error).message}`,
+      `Invalid cinc-dashboard configuration — ${label} could not read ${path}: ${(e as Error).message}`,
     );
   }
 }
@@ -116,6 +130,27 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     caCert = readPem(env.CINC_CA_CERT_FILE, "CINC_CA_CERT_FILE");
   }
 
+  if (!env.CINC_DASHBOARD_DATABASE_URL) {
+    issues.push("CINC_DASHBOARD_DATABASE_URL: required");
+  }
+
+  // The encryption key may be inline (CINC_DASHBOARD_ENCRYPTION_KEY) or a file
+  // (CINC_DASHBOARD_ENCRYPTION_KEY_FILE), same convention as SESSION_SECRET.
+  let dashboardEncryptionKey = env.CINC_DASHBOARD_ENCRYPTION_KEY;
+  if (!dashboardEncryptionKey && env.CINC_DASHBOARD_ENCRYPTION_KEY_FILE) {
+    dashboardEncryptionKey = readPem(
+      env.CINC_DASHBOARD_ENCRYPTION_KEY_FILE,
+      "CINC_DASHBOARD_ENCRYPTION_KEY_FILE",
+    ).replace(/\r?\n$/, "");
+  }
+  if (!dashboardEncryptionKey) {
+    issues.push(
+      "CINC_DASHBOARD_ENCRYPTION_KEY: set CINC_DASHBOARD_ENCRYPTION_KEY or CINC_DASHBOARD_ENCRYPTION_KEY_FILE",
+    );
+  } else if (dashboardEncryptionKey.length < 32) {
+    issues.push("CINC_DASHBOARD_ENCRYPTION_KEY: must be >= 32 chars");
+  }
+
   const authMode = env.AUTH_MODE === "ldap" ? "ldap" : "local";
   let ldapCaCert = env.LDAP_CA_CERT;
   let ldapBindPassword = env.LDAP_BIND_PASSWORD;
@@ -138,7 +173,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
   }
 
   if (!r.success || issues.length) {
-    throw new Error(`Invalid cinc-console configuration — ${issues.join("; ")}`);
+    throw new Error(`Invalid cinc-dashboard configuration — ${issues.join("; ")}`);
   }
   const e = r.data;
   return {
@@ -154,6 +189,8 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
         : e.SESSION_COOKIE_SECURE === "true",
     chefVersion: e.CHEF_VERSION ?? "16.0.0",
     authActor: e.CINC_AUTH_ACTOR,
+    dashboardDatabaseUrl: e.CINC_DASHBOARD_DATABASE_URL!,
+    dashboardEncryptionKey: dashboardEncryptionKey!,
     authMode,
     ldap:
       authMode === "ldap"

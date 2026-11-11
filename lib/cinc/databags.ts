@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { cincRequest } from "./client";
 import { cincPath } from "./path";
 
@@ -14,62 +15,43 @@ import { cincPath } from "./path";
  *   DELETE /data/<bag>/<id>     → delete an item
  */
 export const dataBags = {
-  list: (u: string, o: string) =>
-    cincRequest<Record<string, string>>({
-      user: u,
-      org: o,
-      method: "GET",
-      path: cincPath`/data`,
-    }),
-  createBag: (u: string, o: string, name: string) =>
-    cincRequest<unknown>({
-      user: u,
-      org: o,
+  list: (ctx: AuthorizedActionContext) =>
+    cincRequest<Record<string, string>>(ctx, { method: "GET", path: cincPath`/data` }),
+  createBag: (ctx: AuthorizedActionContext, name: string) =>
+    cincRequest<unknown>(ctx, {
       method: "POST",
       path: cincPath`/data`,
       body: { name },
     }),
-  removeBag: (u: string, o: string, name: string) =>
-    cincRequest<unknown>({
-      user: u,
-      org: o,
+  removeBag: (ctx: AuthorizedActionContext, name: string) =>
+    cincRequest<unknown>(ctx, {
       method: "DELETE",
       path: cincPath`/data/${name}`,
     }),
-  listItems: (u: string, o: string, bag: string) =>
-    cincRequest<Record<string, string>>({
-      user: u,
-      org: o,
+  listItems: (ctx: AuthorizedActionContext, bag: string) =>
+    cincRequest<Record<string, string>>(ctx, {
       method: "GET",
       path: cincPath`/data/${bag}`,
     }),
-  getItem: (u: string, o: string, bag: string, id: string) =>
-    cincRequest<unknown>({
-      user: u,
-      org: o,
+  getItem: (ctx: AuthorizedActionContext, bag: string, id: string) =>
+    cincRequest<unknown>(ctx, {
       method: "GET",
       path: cincPath`/data/${bag}/${id}`,
     }),
-  putItem: (u: string, o: string, bag: string, id: string, body: Record<string, unknown>) =>
-    cincRequest<unknown>({
-      user: u,
-      org: o,
+  putItem: (ctx: AuthorizedActionContext, bag: string, id: string, body: Record<string, unknown>) =>
+    cincRequest<unknown>(ctx, {
       method: "PUT",
       path: cincPath`/data/${bag}/${id}`,
       body,
     }),
-  createItem: (u: string, o: string, bag: string, body: Record<string, unknown>) =>
-    cincRequest<unknown>({
-      user: u,
-      org: o,
+  createItem: (ctx: AuthorizedActionContext, bag: string, body: Record<string, unknown>) =>
+    cincRequest<unknown>(ctx, {
       method: "POST",
       path: cincPath`/data/${bag}`,
       body,
     }),
-  removeItem: (u: string, o: string, bag: string, id: string) =>
-    cincRequest<unknown>({
-      user: u,
-      org: o,
+  removeItem: (ctx: AuthorizedActionContext, bag: string, id: string) =>
+    cincRequest<unknown>(ctx, {
       method: "DELETE",
       path: cincPath`/data/${bag}/${id}`,
     }),

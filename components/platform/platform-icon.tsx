@@ -2,7 +2,7 @@ import type { ReactElement, SVGProps } from "react";
 
 /**
  * Inline monochrome platform glyphs. They use `currentColor` so they inherit
- * text color and the console theme, and ship inline because the console runs
+ * text color and the dashboard theme, and ship inline because the dashboard runs
  * air-gapped (no icon CDN). Related distros share a family glyph to keep the
  * set small; anything unrecognized falls back to a generic server icon.
  */

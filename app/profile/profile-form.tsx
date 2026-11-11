@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { User } from "@/lib/cinc/users";
+import type { DashboardAccount } from "@/lib/dashboard/accounts";
 import { saveProfile, changePassword } from "./actions";
 
 type Status = { kind: "ok" | "err"; text: string } | null;
@@ -54,20 +54,11 @@ function StatusLine({ status }: { status: Status }) {
   );
 }
 
-export function ProfileForm({
-  initial,
-  authMode,
-}: {
-  initial: User;
-  authMode: "local" | "ldap";
-}) {
+export function ProfileForm({ initial }: { initial: DashboardAccount }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [displayName, setDisplayName] = useState(initial.display_name ?? "");
-  const [firstName, setFirstName] = useState(initial.first_name ?? "");
-  const [lastName, setLastName] = useState(initial.last_name ?? "");
-  const [email, setEmail] = useState(initial.email ?? "");
+  const [displayName, setDisplayName] = useState(initial.displayName ?? "");
   const [detailStatus, setDetailStatus] = useState<Status>(null);
 
   const [pw, setPw] = useState("");
@@ -78,12 +69,7 @@ export function ProfileForm({
     e.preventDefault();
     setDetailStatus(null);
     startTransition(async () => {
-      const res = await saveProfile({
-        display_name: displayName,
-        first_name: firstName,
-        last_name: lastName,
-        email,
-      });
+      const res = await saveProfile({ display_name: displayName });
       if ("ok" in res) {
         setDetailStatus({ kind: "ok", text: "Saved." });
         router.refresh();
@@ -118,9 +104,6 @@ export function ProfileForm({
         <form onSubmit={submitDetails} className="space-y-4">
           <h2 className="font-medium">Details</h2>
           <Field label="Display name" value={displayName} onChange={setDisplayName} />
-          <Field label="First name" value={firstName} onChange={setFirstName} />
-          <Field label="Last name" value={lastName} onChange={setLastName} />
-          <Field label="Email" value={email} onChange={setEmail} type="email" />
           <StatusLine status={detailStatus} />
           <Button type="submit" disabled={pending}>
             Save details
@@ -128,7 +111,7 @@ export function ProfileForm({
         </form>
       </Card>
 
-      {authMode === "ldap" ? (
+      {initial.authSource === "ldap" ? (
         <Card>
           <h2 className="font-medium">Change password</h2>
           <p className="mt-2 text-sm text-muted">

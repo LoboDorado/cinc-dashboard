@@ -19,7 +19,7 @@ export default function LoginPage() {
                 unoptimized
               />
             </div>
-            <h1 className="text-lg font-medium tracking-tight text-text">console</h1>
+            <h1 className="text-lg font-medium tracking-tight text-text">dashboard</h1>
             <p className="mt-1 text-sm text-muted">Sign in to your Cinc Server</p>
           </div>
           <Suspense fallback={null}>

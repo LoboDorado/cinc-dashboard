@@ -16,15 +16,17 @@ type Crumb = { label: string; href: string; link: boolean };
 export function Breadcrumbs() {
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean);
-  if (parts[0] !== "orgs" || parts.length < 3) return null; // need org + at least a section
+  // /servers/<server>/orgs/<org>/<section>/... — need at least a section.
+  if (parts[0] !== "servers" || parts[2] !== "orgs" || parts.length < 5) return null;
 
-  const org = parts[1];
-  const rest = parts.slice(2);
+  const server = parts[1];
+  const org = parts[3];
+  const rest = parts.slice(4);
 
   const crumbs: Crumb[] = [
-    { label: decodeURIComponent(org), href: `/orgs/${org}`, link: true },
+    { label: decodeURIComponent(org), href: `/servers/${server}/orgs/${org}`, link: true },
   ];
-  let acc = `/orgs/${org}`;
+  let acc = `/servers/${server}/orgs/${org}`;
   rest.forEach((seg, i) => {
     acc += `/${seg}`;
     const isSection = i === 0;

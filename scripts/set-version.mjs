@@ -26,7 +26,7 @@ export const TARGETS = [
     verify: (text, version) => JSON.parse(text).version === version,
   },
   {
-    file: "deploy/helm/cinc-console/Chart.yaml",
+    file: "deploy/helm/cinc-dashboard/Chart.yaml",
     // Both `version:` and `appVersion:` move in lockstep — the chart only ever
     // deploys this app, so a separate chart version would be bookkeeping with
     // no consumer. values.yaml needs no edit: `tag: ""` defers to appVersion.
@@ -39,15 +39,15 @@ export const TARGETS = [
   {
     file: "deploy/compose/compose.yaml",
     // The default image of the Compose example, so a checkout of a release tag
-    // runs that release. CINC_CONSOLE_IMAGE still overrides it, and anchoring
+    // runs that release. CINC_DASHBOARD_IMAGE still overrides it, and anchoring
     // on the full line keeps other services' images (caddy) out of reach.
     read: (text) =>
-      [...text.matchAll(/^ {4}image: \$\{CINC_CONSOLE_IMAGE:-ghcr\.io\/cinc-project\/cinc-console:([^}\n]*)\}$/gm)].map(
+      [...text.matchAll(/^ {4}image: \$\{CINC_DASHBOARD_IMAGE:-ghcr\.io\/cinc-project\/cinc-dashboard:([^}\n]*)\}$/gm)].map(
         (m) => m[1],
       ),
     set: (text, version) =>
       text.replace(
-        /^( {4}image: \$\{CINC_CONSOLE_IMAGE:-ghcr\.io\/cinc-project\/cinc-console:)[^}\n]*\}$/m,
+        /^( {4}image: \$\{CINC_DASHBOARD_IMAGE:-ghcr\.io\/cinc-project\/cinc-dashboard:)[^}\n]*\}$/m,
         `$1${version}}`,
       ),
   },

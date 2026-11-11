@@ -1,12 +1,16 @@
-// Server-only transport for the cinc server.
+// Server-only transport for a registered Cinc Server.
 //
-// Every request is signed with the webui key while impersonating the
-// logged-in user (X-Ops-UserId + X-Ops-Request-Source: web), so the server
-// enforces that user's real ACLs. This module must never be imported into a
-// Client Component — it holds the webui key.
+// Every request is signed with that server's webui key while impersonating
+// its configured shared admin identity (X-Ops-UserId + X-Ops-Request-Source:
+// web), NOT the real dashboard account that triggered it -- see
+// lib/admin/access.ts, whose AuthorizedActionContext is the only way to call
+// this module. This module must never be imported into a Client Component —
+// it holds decrypted webui keys.
 import "server-only";
-import { Agent, setGlobalDispatcher } from "undici";
+import { Agent } from "undici";
+import type { AuthorizedActionContext } from "../admin/access";
 import { getConfig } from "../config";
+import { recordAudit } from "../db/audit";
 import { signHeaders } from "./signing";
 import { CincError } from "./errors";
 import {
@@ -17,17 +21,22 @@ import {
 } from "./path";
 import { log } from "../log";
 
-let dispatcherReady = false;
+// One undici Agent per registered server, keyed by serverId, so each server's
+// own CA/TLS settings apply only to requests against it -- a single global
+// dispatcher (the pre-multi-server design) can't express that. Agents are
+// cheap to keep around for the life of the process; there's no eviction
+// because registered servers are expected to number in the dozens, not
+// thousands.
+const dispatchers = new Map<string, Agent>();
 
-function ensureTls() {
-  if (dispatcherReady) return;
-  const { caCert, sslNoVerify } = getConfig();
-  if (sslNoVerify || caCert) {
-    setGlobalDispatcher(
-      new Agent({ connect: { rejectUnauthorized: !sslNoVerify, ca: caCert } }),
-    );
+function dispatcherFor(ctx: AuthorizedActionContext): Agent | undefined {
+  if (!ctx.sslNoVerify && !ctx.caCert) return undefined; // default agent is fine
+  let agent = dispatchers.get(ctx.serverId);
+  if (!agent) {
+    agent = new Agent({ connect: { rejectUnauthorized: !ctx.sslNoVerify, ca: ctx.caCert } });
+    dispatchers.set(ctx.serverId, agent);
   }
-  dispatcherReady = true;
+  return agent;
 }
 
 /** ISO-8601 UTC with no fractional seconds, e.g. 2024-01-01T00:00:00Z. */
@@ -45,14 +54,6 @@ export function nowMs(): number {
 }
 
 export type CincRequestOptions = {
-  /** The signing actor (X-Ops-UserId): normally the logged-in user. */
-  user: string;
-  /**
-   * The person the request is for, when that isn't the signer. Logs only,
-   * never signed: POST /authenticate_user is signed as CINC_AUTH_ACTOR but is
-   * on behalf of the user logging in. Defaults to `user`.
-   */
-  onBehalfOf?: string;
   method: string;
   /**
    * Built with the `cincPath` tagged template, which vets each interpolated name
@@ -61,8 +62,6 @@ export type CincRequestOptions = {
    */
   path: CincPath;
   body?: unknown;
-  /** When set, the path is prefixed with /organizations/<org>. */
-  org?: string;
   /**
    * Query parameters appended to the request URL. Kept SEPARATE from `path`
    * because Chef's v1.3 signing canonicalizes the path only — the query string
@@ -72,27 +71,26 @@ export type CincRequestOptions = {
   query?: Record<string, string | number>;
 };
 
-export async function cincRequest<T>(opts: CincRequestOptions): Promise<T> {
-  ensureTls();
-  const { serverUrl, webuiKey, chefVersion } = getConfig();
-  const fullPath = opts.org
-    ? `/organizations/${opts.org}${opts.path}`
-    : opts.path;
+export async function cincRequest<T>(
+  ctx: AuthorizedActionContext,
+  opts: CincRequestOptions,
+): Promise<T> {
+  const fullPath = ctx.org ? `/organizations/${ctx.org}${opts.path}` : opts.path;
   // `path` is already vetted segment-by-segment by its `cincPath` tag. The two
-  // values spliced in here are not, so vet them the same way BEFORE signing: the
-  // org slug is a path segment (and comes straight from a route param, where Next
-  // decodes `%2F` into a real separator), and the impersonated user id also lands
-  // in a request header, where a CR/LF would be header injection. See path.ts.
+  // values spliced in here are not, so vet them the same way BEFORE signing:
+  // the org slug ultimately comes from a route param (where Next decodes
+  // `%2F` into a real separator), and the impersonated user id also lands in a
+  // request header, where a CR/LF would be header injection. See path.ts.
   try {
-    assertSafeSegment(opts.user, "user");
-    if (opts.org !== undefined) assertSafeSegment(opts.org, "org");
+    assertSafeSegment(ctx.impersonationUsername, "user");
+    if (ctx.org !== undefined) assertSafeSegment(ctx.org, "org");
     assertSafePath(fullPath);
   } catch (e) {
     if (isUnsafePathError(e)) {
       log.warn("cinc.unsafe_path", {
-        actor: opts.user,
-        user: opts.onBehalfOf ?? opts.user,
-        org: opts.org,
+        actor: ctx.impersonationUsername,
+        user: ctx.onBehalfOf,
+        org: ctx.org,
         method: opts.method,
         path: fullPath,
         detail: e.detail,
@@ -107,13 +105,13 @@ export async function cincRequest<T>(opts: CincRequestOptions): Promise<T> {
         method: opts.method,
         path: fullPath,
         body: bodyStr,
-        userId: opts.user,
+        userId: ctx.impersonationUsername,
         timestamp: nowIso(),
       },
-      webuiKey,
+      ctx.webuiKey,
     ),
     "X-Ops-Request-Source": "web",
-    "X-Chef-Version": chefVersion,
+    "X-Chef-Version": getConfig().chefVersion,
     Accept: "application/json",
   };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
@@ -126,22 +124,38 @@ export async function cincRequest<T>(opts: CincRequestOptions): Promise<T> {
       ).toString()
     : "";
 
-  const res = await fetch(serverUrl + fullPath + qs, {
+  const res = await fetch(ctx.serverUrl + fullPath + qs, {
     method: opts.method,
     headers,
     body: opts.body === undefined ? undefined : bodyStr,
-  });
+    dispatcher: dispatcherFor(ctx),
+  } as RequestInit);
   const text = await res.text();
   const parsed = text ? safeJson(text) : null;
+
+  // Not fire-and-forget: a failed audit write fails the request, since this
+  // is the only record of who (really) did what through the shared
+  // impersonation identity -- see lib/db/audit.ts.
+  await recordAudit({
+    actorAccountId: ctx.accountId,
+    actorUsername: ctx.onBehalfOf,
+    serverId: ctx.serverId,
+    org: ctx.org,
+    action: opts.method,
+    resourcePath: fullPath,
+    outcome: res.ok ? "success" : "error",
+    statusCode: res.status,
+  });
+
   if (!res.ok) {
-    // Audit trail of denied/failed server calls. Identifiers only — never the
-    // body (data bag items hold secrets) or headers (they carry the signature).
-    // `actor` signed the request; `user` is who it was for. They differ only
-    // when signing as CINC_AUTH_ACTOR (login).
+    // Identifiers only — never the body (data bag items hold secrets) or
+    // headers (they carry the signature). `actor` is the shared identity
+    // that signed the request; `user` is the real dashboard account it was
+    // for.
     log[res.status >= 500 ? "error" : "warn"]("cinc.request_failed", {
-      actor: opts.user,
-      user: opts.onBehalfOf ?? opts.user,
-      org: opts.org,
+      actor: ctx.impersonationUsername,
+      user: ctx.onBehalfOf,
+      org: ctx.org,
       method: opts.method,
       path: fullPath,
       status: res.status,

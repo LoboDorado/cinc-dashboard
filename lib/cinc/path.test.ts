@@ -38,7 +38,7 @@ describe("assertSafePath", () => {
 
   test("rejects a name that escapes its segment", () => {
     // /orgs/acme/nodes/web01%2F_acl arrives from Next as the name "web01/_acl":
-    // signed and sent identically, so without this guard the console would sign a
+    // signed and sent identically, so without this guard the dashboard would sign a
     // request for the ACL endpoint it never exposes.
     expect(rejects(() => assertSafePath("/organizations/acme/nodes/web01/_acl/"))).toBe(
       true,

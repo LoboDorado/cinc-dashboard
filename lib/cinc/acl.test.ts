@@ -6,15 +6,16 @@ vi.mock("./client", () => ({ cincRequest: (...a: unknown[]) => req(...a) }));
 
 import { getAcl } from "./acl";
 import { cincPath } from "./path";
+import type { AuthorizedActionContext } from "../admin/access";
+
+const ctx = { org: "acme" } as AuthorizedActionContext;
 
 beforeEach(() => req.mockReset());
 
-test("getAcl hits GET /<kind>/<name>/_acl within the org", async () => {
+test("getAcl hits GET /<kind>/<name>/_acl", async () => {
   req.mockResolvedValueOnce({});
-  await getAcl("alice", "acme", "nodes", "web01");
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await getAcl(ctx, "nodes", "web01");
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "GET",
     path: cincPath`/nodes/web01/_acl`,
   });

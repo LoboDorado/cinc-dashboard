@@ -10,7 +10,7 @@ export const CLI_TOOLS: { id: CliTool; label: string }[] = [
   { id: "knife", label: "knife" },
 ];
 
-const KEY = "cinc-console.cli-tool";
+const KEY = "cinc-dashboard.cli-tool";
 const DEFAULT: CliTool = "cinc";
 const listeners = new Set<() => void>();
 

@@ -1,0 +1,116 @@
+# Default values for cinc-dashboard.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/cinc-project/cinc-dashboard
+  tag: "" # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Connection to the Cinc/Chef Infra Server. The server's root URL, without
+# a /organizations/<org> path (unlike a client's chef_server_url).
+cincServerUrl: "" # e.g. https://chef.example.com  (REQUIRED)
+# Skip TLS verification of the cinc server (dev only).
+sslNoVerify: false
+# Session cookie lifetime in seconds (default 8h).
+sessionTtlSeconds: 28800
+# Node environment (production or development). In production, secure cookies are used.
+# In development, cookies are insecure (http). Set to development to debug session issues.
+nodeEnv: "production"
+# Secure flag on the session cookie. Leave empty to follow nodeEnv (on in
+# production, off in development) — correct for any HTTPS deployment, including
+# behind an Ingress that terminates TLS. Set to false ONLY for a deliberate
+# plain-HTTP deployment: the flag is never inferred from request headers, because
+# X-Forwarded-Proto is attacker-supplied unless every path to the pod strips it.
+cookieSecure: ""
+# Signing actor for POST /authenticate_user. This endpoint is global (non-org)
+# and its ACL only grants "create" to globally-privileged actors. Set this to
+# "pivotal" (or another global admin) so the webui-signed request is accepted.
+# Leave empty to sign as the authenticating user (works only if that user has
+# global create permission, which org users typically do not).
+authActor: "pivotal"
+
+# -- How login credentials are verified: "local" (default) asks the Cinc
+# server's own /authenticate_user; "ldap" binds against an external
+# directory instead. Either way, the submitted username must already exist
+# as a Cinc user object - LDAP only replaces the password check, it never
+# provisions Cinc users.
+authMode: "local" # "local" or "ldap"
+
+# -- LDAP bind authentication. Only used when authMode is "ldap".
+ldap:
+  # LDAP/AD server URL, e.g. ldaps://dc1.example.com:636 (REQUIRED if authMode=ldap)
+  url: ""
+  # Search base DN, e.g. dc=example,dc=com (REQUIRED if authMode=ldap)
+  baseDn: ""
+  # Service-account bind DN for the search phase. Leave bindDn and
+  # bindPassword both empty for an anonymous search bind.
+  bindDn: ""
+  # Service-account bind password (secret). Provide here, or via
+  # existingSecret's LDAP_BIND_PASSWORD key.
+  bindPassword: ""
+  # Search filter template. {{username}} is replaced with the escaped,
+  # submitted username. Default suits OpenLDAP; Active Directory typically
+  # uses (sAMAccountName={{username}}).
+  userFilter: "(uid={{username}})"
+  # Search timeout in milliseconds.
+  searchTimeoutMs: 5000
+  # Skip TLS verification against the directory (dev/test only).
+  tlsNoVerify: false
+  # A PEM CA bundle to trust for the directory, if different from the
+  # cinc server's caCert above (optional).
+  caCert: ""
+  # The NetworkPolicy (templates/egress.yaml) always allows egress to 389 and
+  # 636 when authMode is "ldap". Add ports here if your directory listens on
+  # something else, e.g. a non-standard LDAPS port.
+  extraNetworkPolicyPorts: []
+
+# -- Secrets. Provide the webui key here, or point existingSecret at a
+# pre-created Secret that holds CINC_WEBUI_KEY, SESSION_SECRET,
+# CINC_DASHBOARD_DATABASE_URL, CINC_DASHBOARD_ENCRYPTION_KEY, and optionally
+# CINC_CA_CERT, LDAP_BIND_PASSWORD, LDAP_CA_CERT.
+webuiKey: "" # contents of webui_priv.pem (REQUIRED unless existingSecret set)
+# A PEM CA bundle to trust for a self-signed cinc server (optional).
+caCert: ""
+# 32+ char secret used to encrypt the session cookie. Generated if empty.
+sessionSecret: ""
+# -- Connection to the dashboard's own Postgres database (accounts,
+# registered servers/collectors, role grants, audit log) — unrelated to
+# cinc-collector's own database. Commonly carries embedded credentials, so
+# it lives in the Secret, not the ConfigMap.
+dashboardDatabaseUrl: "" # e.g. postgres://user:pass@host:5432/cinc_dashboard (REQUIRED unless existingSecret set)
+# 32+ char key used to encrypt secrets at rest (registered servers' webui
+# keys, registered collectors' bearer tokens) in the dashboard's own
+# database. Generated if empty, like sessionSecret. Deliberately separate
+# from sessionSecret so rotating one doesn't force re-encrypting the other.
+dashboardEncryptionKey: ""
+# Use an externally-managed Secret instead of the values above.
+existingSecret: ""
+
+service:
+  type: ClusterIP # ClusterIP, NodePort, LoadBalancer
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: cinc-dashboard.example.com
+  tls: [] # e.g. [{ secretName: cinc-dashboard-tls, hosts: [cinc-dashboard.example.com] }]
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

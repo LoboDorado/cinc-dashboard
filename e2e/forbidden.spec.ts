@@ -3,7 +3,7 @@ import { MEMBER, ORG, alert, login } from "./helpers";
 
 // bob is a plain member of acme (the `users` group). Under the server's default
 // ACLs that group may read clients but not create them, so the server answers
-// 403 and the console must say so rather than error out. The console makes no
+// 403 and the dashboard must say so rather than error out. The dashboard makes no
 // permission decision of its own here; the denial comes from cinc-server-ng.
 test("a member without create permission sees the forbidden message", async ({
   page,

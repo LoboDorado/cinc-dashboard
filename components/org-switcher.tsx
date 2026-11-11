@@ -5,7 +5,7 @@ import type { Org } from "@/lib/cinc/orgs";
 
 export function OrgSwitcher({ orgs }: { orgs: Org[] }) {
   const router = useRouter();
-  const params = useParams<{ org?: string }>();
+  const params = useParams<{ server: string; org?: string }>();
   const current = params?.org ?? "";
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -13,7 +13,7 @@ export function OrgSwitcher({ orgs }: { orgs: Org[] }) {
     // server-provided <option> values and is URL-encoded into the path — it is
     // never written into an HTML response. js-express-xss assumes an Express
     // req/res model that doesn't exist in this "use client" component.
-    router.push(`/orgs/${e.target.value}`); // nosemgrep: js-express-xss
+    router.push(`/servers/${params.server}/orgs/${e.target.value}`); // nosemgrep: js-express-xss
   }
 
   return (

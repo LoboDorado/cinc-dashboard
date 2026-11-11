@@ -19,7 +19,15 @@ type Command = { id: string; label: string; hint?: string; href: string };
  * the input owns aria-activedescendant, options are aria-selected, and focus is
  * trapped to the input (the only focusable control) and restored on close.
  */
-export function CommandPalette({ org, orgs }: { org: string; orgs: Org[] }) {
+export function CommandPalette({
+  server,
+  org,
+  orgs,
+}: {
+  server: string;
+  org: string;
+  orgs: Org[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -41,7 +49,7 @@ export function CommandPalette({ org, orgs }: { org: string; orgs: Org[] }) {
       id: `nav-${n.slug}`,
       label: n.label,
       hint: "Section",
-      href: `/orgs/${org}/${n.slug}`,
+      href: `/servers/${server}/orgs/${org}/${n.slug}`,
     }));
     const orgCmds: Command[] = orgs
       .filter((o) => o.name !== org)
@@ -49,7 +57,7 @@ export function CommandPalette({ org, orgs }: { org: string; orgs: Org[] }) {
         id: `org-${o.name}`,
         label: `Switch to ${o.full_name ?? o.name}`,
         hint: "Organization",
-        href: `/orgs/${o.name}`,
+        href: `/servers/${server}/orgs/${o.name}`,
       }));
     const profile: Command = {
       id: "profile",
@@ -58,7 +66,7 @@ export function CommandPalette({ org, orgs }: { org: string; orgs: Org[] }) {
       href: "/profile",
     };
     return [...sections, ...orgCmds, profile];
-  }, [org, orgs]);
+  }, [server, org, orgs]);
 
   // Jump-to-object commands from the lazily-fetched name lists.
   const objectCommands = useMemo<Command[]>(
@@ -67,9 +75,9 @@ export function CommandPalette({ org, orgs }: { org: string; orgs: Org[] }) {
         id: `obj-${o.kind}-${o.name}`,
         label: o.name,
         hint: o.label,
-        href: `/orgs/${org}/${o.kind}/${encodeURIComponent(o.name)}`,
+        href: `/servers/${server}/orgs/${org}/${o.kind}/${encodeURIComponent(o.name)}`,
       })),
-    [objects, org],
+    [objects, server, org],
   );
 
   // Objects only appear once you type, to keep the default view tidy.
@@ -113,7 +121,7 @@ export function CommandPalette({ org, orgs }: { org: string; orgs: Org[] }) {
   useEffect(() => {
     if (!open || loadedOrg.current === org) return;
     let cancelled = false;
-    searchOrgObjects(org).then((objs) => {
+    searchOrgObjects(server, org).then((objs) => {
       if (cancelled) return;
       loadedOrg.current = org;
       setObjects(objs);
@@ -121,7 +129,7 @@ export function CommandPalette({ org, orgs }: { org: string; orgs: Org[] }) {
     return () => {
       cancelled = true;
     };
-  }, [open, org]);
+  }, [open, server, org]);
 
   function run(cmd: Command | undefined) {
     if (!cmd) return;

@@ -4,7 +4,7 @@ import "server-only";
  * Minimal structured logger: one JSON object per line to stdout/stderr.
  *
  * No dependency — in the container, Kubernetes collects stdout, so JSON lines
- * are the cheapest path to queryable logs. This is a privileged console, so the
+ * are the cheapest path to queryable logs. This is a privileged dashboard, so the
  * point is an audit trail (who logged in, which Cinc requests were denied), not
  * verbose tracing.
  *

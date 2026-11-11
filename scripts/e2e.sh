@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end run: boot a throwaway cinc-server-ng (the Go successor to
-# cinc-zero) from the e2e/fixtures/state seed, point the console at it, and run
+# cinc-zero) from the e2e/fixtures/state seed, point the dashboard at it, and run
 # the Playwright suite. Extra arguments go to `playwright test`.
 #
 #   bash scripts/e2e.sh                 # whole suite

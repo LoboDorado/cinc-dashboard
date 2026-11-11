@@ -7,7 +7,7 @@ import { CopyButton } from "./ui/copy-button";
 /**
  * A dependency-light JSON editor: a monospace textarea with live validation.
  * Reports validity to the parent so Save can be disabled on invalid JSON.
- * Deliberately avoids a CDN-loaded editor so the console works air-gapped.
+ * Deliberately avoids a CDN-loaded editor so the dashboard works air-gapped.
  */
 export function JsonEditor({
   value,

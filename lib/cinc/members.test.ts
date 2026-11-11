@@ -6,15 +6,16 @@ vi.mock("./client", () => ({ cincRequest: (...a: unknown[]) => req(...a) }));
 
 import { members } from "./members";
 import { cincPath } from "./path";
+import type { AuthorizedActionContext } from "../admin/access";
+
+const ctx = { org: "acme" } as AuthorizedActionContext;
 
 beforeEach(() => req.mockReset());
 
-test("listUsers hits GET /users within the org", async () => {
+test("listUsers hits GET /users", async () => {
   req.mockResolvedValueOnce([]);
-  await members.listUsers("alice", "acme");
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await members.listUsers(ctx);
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "GET",
     path: cincPath`/users`,
   });
@@ -22,10 +23,8 @@ test("listUsers hits GET /users within the org", async () => {
 
 test("invite POSTs the username to /association_requests", async () => {
   req.mockResolvedValueOnce({});
-  await members.invite("alice", "acme", "bob");
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await members.invite(ctx, "bob");
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "POST",
     path: cincPath`/association_requests`,
     body: { user: "bob" },
@@ -34,10 +33,8 @@ test("invite POSTs the username to /association_requests", async () => {
 
 test("removeUser DELETEs /users/<name>", async () => {
   req.mockResolvedValueOnce({});
-  await members.removeUser("alice", "acme", "bob");
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await members.removeUser(ctx, "bob");
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "DELETE",
     path: cincPath`/users/bob`,
   });
@@ -45,10 +42,8 @@ test("removeUser DELETEs /users/<name>", async () => {
 
 test("getGroup hits GET /groups/<name>", async () => {
   req.mockResolvedValueOnce({});
-  await members.getGroup("alice", "acme", "admins");
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await members.getGroup(ctx, "admins");
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "GET",
     path: cincPath`/groups/admins`,
   });
@@ -56,10 +51,8 @@ test("getGroup hits GET /groups/<name>", async () => {
 
 test("updateGroup PUTs the body to /groups/<name>", async () => {
   req.mockResolvedValueOnce({});
-  await members.updateGroup("alice", "acme", "admins", { users: ["bob"] });
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await members.updateGroup(ctx, "admins", { users: ["bob"] });
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "PUT",
     path: cincPath`/groups/admins`,
     body: { users: ["bob"] },

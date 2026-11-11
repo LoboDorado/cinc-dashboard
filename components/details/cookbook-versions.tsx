@@ -20,13 +20,13 @@ function explain(error: string): string {
  * the whole cookbook) returns to the list, where the cookbook no longer exists.
  */
 export function CookbookVersions({
-  org,
+  listHref,
   name,
   versions,
   onDeleteVersion,
   onDeleteCookbook,
 }: {
-  org: string;
+  listHref: string;
   name: string;
   versions: string[];
   onDeleteVersion: (version: string) => Promise<ActionResult>;
@@ -39,7 +39,6 @@ export function CookbookVersions({
   const [confirmAll, setConfirmAll] = useState(false);
 
   const sorted = [...versions].sort().reverse();
-  const listHref = `/orgs/${org}/cookbooks`;
 
   function removeVersion(version: string) {
     setConfirmVersion(null);

@@ -1,30 +1,30 @@
-# cinc-console
+# cinc-dashboard
 
-A web console for a [Cinc](https://cinc.sh/) / Chef Infra Server. Browse and
+A web dashboard for a [Cinc](https://cinc.sh/) / Chef Infra Server. Browse and
 edit the objects in your organizations — nodes, roles, environments, data bags,
 members — from the browser, with the server enforcing each user's real
 permissions.
 
 ## How it works
 
-cinc-console uses the classic **webui-key impersonation** model. The console
-holds the server's `webui_priv.pem`. Users log in with their server username and
-password; every request the console then makes to the cinc server is signed with
-the webui key while carrying the logged-in user's identity
-(`X-Ops-Userid` + `X-Ops-Request-Source: web`). The server applies that user's
-ACLs, so the console never decides permissions — a `403` from the server is what
-gates editing in the UI, exactly as it would for `knife`.
+cinc-dashboard uses the classic **webui-key impersonation** model. The
+dashboard holds the server's `webui_priv.pem`. Users log in with their server
+username and password; every request the dashboard then makes to the cinc
+server is signed with the webui key while carrying the logged-in user's
+identity (`X-Ops-Userid` + `X-Ops-Request-Source: web`). The server applies
+that user's ACLs, so the dashboard never decides permissions — a `403` from
+the server is what gates editing in the UI, exactly as it would for `knife`.
 
 - **Single Next.js app.** The webui key and all request signing run server-side
   only; the browser never sees the key or talks to the cinc server directly.
 - **Stateless sessions.** The session is an encrypted cookie holding only the
-  username, so the console scales to N replicas with no Redis or database.
+  username, so the dashboard scales to N replicas with no Redis or database.
 - **v1.3 signing.** The signing module is a faithful port of the Go
   [`cinc-api`](https://github.com/cinc-project/cinc-api) implementation, pinned by a
   byte-for-byte conformance test.
 - **Pluggable authentication.** Local login checks the password against the
   Cinc server's own `/authenticate_user` by default; optionally bind against
-  an external directory instead (`AUTH_MODE=ldap`). Either way, the console
+  an external directory instead (`AUTH_MODE=ldap`). Either way, the dashboard
   still impersonates the same Cinc user object - LDAP only replaces the
   password check, it never provisions users.
 
@@ -44,7 +44,7 @@ private key is shown once at creation and is never retrievable again).
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `CINC_SERVER_URL` | yes | Root URL of the Cinc/Chef server, e.g. `https://chef.example.com`. No `/organizations/<org>` path: unlike a client's `chef_server_url`, the console covers every org and builds those paths itself. |
+| `CINC_SERVER_URL` | yes | Root URL of the Cinc/Chef server, e.g. `https://chef.example.com`. No `/organizations/<org>` path: unlike a client's `chef_server_url`, the dashboard covers every org and builds those paths itself. |
 | `CINC_WEBUI_KEY` | conditional | Inline contents of `webui_priv.pem` (PEM). Required when `CINC_WEBUI_KEY_FILE` is not set. |
 | `CINC_WEBUI_KEY_FILE` | conditional | Path to `webui_priv.pem`. Required when `CINC_WEBUI_KEY` is not set. |
 | `SESSION_SECRET` | conditional | 32+ char secret used to encrypt the session cookie. Required when `SESSION_SECRET_FILE` is not set. |
@@ -56,6 +56,9 @@ private key is shown once at creation and is never retrievable again).
 | `SESSION_COOKIE_SECURE` | no | `Secure` flag on the session cookie. Unset follows `NODE_ENV` (on in production); set to `false` only for a deliberate plain-HTTP deployment |
 | `CHEF_VERSION` | no | API version header sent to the server, default `16.0.0` |
 | `CINC_AUTH_ACTOR` | no | Globally-privileged actor (for example `pivotal`) used for `POST /authenticate_user` on servers that require global create permissions |
+| `CINC_DASHBOARD_DATABASE_URL` | yes | Postgres connection string for the dashboard's own admin-plane data (accounts, registered servers/collectors, role grants, audit log) — unrelated to cinc-collector's own database |
+| `CINC_DASHBOARD_ENCRYPTION_KEY` | conditional | 32+ char key that encrypts secrets at rest in that database. Required when `CINC_DASHBOARD_ENCRYPTION_KEY_FILE` is not set. Kept separate from `SESSION_SECRET` so rotating one doesn't force re-encrypting the other |
+| `CINC_DASHBOARD_ENCRYPTION_KEY_FILE` | conditional | Path to a file holding the encryption key. Required when `CINC_DASHBOARD_ENCRYPTION_KEY` is not set |
 | `AUTH_MODE` | no | `local` (default) or `ldap`. When `ldap`, see `LDAP_URL`/`LDAP_BASE_DN`/etc. in `.env.example` for the full set of directory-bind options |
 
 The app validates these at boot and exits with a clear message if a required
@@ -65,25 +68,32 @@ and fill in your environment-specific values.
 ## Deploy to Kubernetes
 
 ```bash
-helm install cinc-console ./deploy/helm/cinc-console \
+helm install cinc-dashboard ./deploy/helm/cinc-dashboard \
   --set cincServerUrl=https://chef.example.com \
-  --set-file webuiKey=/etc/opscode/webui_priv.pem
+  --set-file webuiKey=/etc/opscode/webui_priv.pem \
+  --set dashboardDatabaseUrl=postgres://user:password@postgres.example.com:5432/cinc_dashboard
 ```
 
-`SESSION_SECRET` is generated automatically and preserved across upgrades. See
-`deploy/helm/cinc-console/values.yaml` for all options (ingress, resources,
+Apply the schema once against that database with
+`CINC_DASHBOARD_DATABASE_URL=… node scripts/migrate.mjs` (run from a checkout,
+or `kubectl exec` into a running pod — the image includes the script).
+
+`SESSION_SECRET` and `CINC_DASHBOARD_ENCRYPTION_KEY` are generated
+automatically and preserved across upgrades. See
+`deploy/helm/cinc-dashboard/values.yaml` for all options (ingress, resources,
 `existingSecret`, etc.) and `values-example.yaml` for a minimal config.
 
 For developer-specific overrides, use a local values file layered last:
 
 ```bash
-cp deploy/helm/cinc-console/values-local.example.yaml \
-  deploy/helm/cinc-console/values-local.yaml
+cp deploy/helm/cinc-dashboard/values-local.example.yaml \
+  deploy/helm/cinc-dashboard/values-local.yaml
 
-helm upgrade --install cinc-console deploy/helm/cinc-console \
-  -f deploy/helm/cinc-console/values-local.yaml \
+helm upgrade --install cinc-dashboard deploy/helm/cinc-dashboard \
+  -f deploy/helm/cinc-dashboard/values-local.yaml \
   --set cincServerUrl=https://chef.example.com \
-  --set-file webuiKey=/etc/opscode/webui_priv.pem
+  --set-file webuiKey=/etc/opscode/webui_priv.pem \
+  --set dashboardDatabaseUrl=postgres://user:password@postgres.example.com:5432/cinc_dashboard
 ```
 
 `values-local.yaml` is gitignored so you can keep local dev settings (for
@@ -96,7 +106,7 @@ same hardening, secrets mounted as files, and an optional Caddy service for TLS.
 
 ```bash
 cd deploy/compose
-cp cinc-console.env.example cinc-console.env   # set CINC_SERVER_URL
+cp cinc-dashboard.env.example cinc-dashboard.env   # set CINC_SERVER_URL
 # add secrets/webui_priv.pem and secrets/session_secret, see the README there
 docker compose up -d                           # runs the published image
 ```
@@ -108,7 +118,7 @@ LDAP, building from the checkout, and the differences from the chart.
 
 [cinc-server-ng](https://github.com/cinc-project/cinc-server-ng) has no
 `webui_priv.pem` to copy. By default it trusts its bootstrap admin (`pivotal`)
-key for webui impersonation, so the console would have to hold the admin key.
+key for webui impersonation, so the dashboard would have to hold the admin key.
 Give it a dedicated webui keypair instead. The server only needs the public
 half, and the two keys can then be rotated separately:
 
@@ -120,14 +130,14 @@ openssl rsa -in webui_priv.pem -pubout -out webui_pub.pem
 cinc-server-ng --storage sqlite --db /data/cinc.db --webui-key webui_pub.pem
 ```
 
-Give the console `webui_priv.pem` (`CINC_WEBUI_KEY_FILE`, the Helm chart's
+Give the dashboard `webui_priv.pem` (`CINC_WEBUI_KEY_FILE`, the Helm chart's
 `webuiKey`, or `secrets/webui_priv.pem` for Compose) and keep `webui_pub.pem`
 with the server.
 
 A fresh cinc-server-ng has only `pivotal`, which has a key but no password, so
-nobody can log in to the console yet. Create a user with a password and make it
-an org admin, signed as `pivotal` with the [`cinc`](https://github.com/cinc-project/cinc-cli)
-CLI:
+nobody can log in to the dashboard yet. Create a user with a password and make
+it an org admin, signed as `pivotal` with the
+[`cinc`](https://github.com/cinc-project/cinc-cli) CLI:
 
 ```bash
 cinc user create alice --email alice@example.com --password '...'
@@ -135,8 +145,8 @@ cinc org member add alice
 cinc group member add admins alice
 ```
 
-Keep `CINC_AUTH_ACTOR=pivotal` (the Compose and Helm default) so the console's
-password checks are signed by a superuser.
+Keep `CINC_AUTH_ACTOR=pivotal` (the Compose and Helm default) so the
+dashboard's password checks are signed by a superuser.
 
 For a local dev loop against cinc-server-ng, see
 [TROUBLESHOOTING.md](TROUBLESHOOTING.md#testing-against-cinc-server-ng).
@@ -144,7 +154,7 @@ For a local dev loop against cinc-server-ng, see
 ## Building images
 
 Official images are published to GitHub Container Registry as
-`ghcr.io/cinc-project/cinc-console` via the project's automated build/release
+`ghcr.io/cinc-project/cinc-dashboard` via the project's automated build/release
 workflows. In most cases, use those images directly.
 
 Build your own image when you need environment-specific behavior, such as:
@@ -157,7 +167,7 @@ Build your own image when you need environment-specific behavior, such as:
 For standard builds with access to the public npm registry:
 
 ```bash
-docker build -t cinc-console:local .
+docker build -t cinc-dashboard:local .
 ```
 
 If your environment must use a private npm registry, create a local `.npmrc`
@@ -186,10 +196,10 @@ pnpm build                   # production build
 
 - The webui key is a powerful credential — it can act as any user. Keep it in a
   Kubernetes Secret (or `existingSecret`), never in the image or client bundle.
-- Serve the console over TLS; the session cookie is `HttpOnly` + `Secure` in
+- Serve the dashboard over TLS; the session cookie is `HttpOnly` + `Secure` in
   production (config-driven via `SESSION_COOKIE_SECURE`, never inferred from a
   request header).
-- Authorization is always the cinc server's. The console pre-disables some
+- Authorization is always the cinc server's. The dashboard pre-disables some
   controls as a convenience but never substitutes its own permission decisions.
 - Login and logout are CSRF-guarded (reject cross-site requests, require
   `application/json`), every signed request path is built through a branded

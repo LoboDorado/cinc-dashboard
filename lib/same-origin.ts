@@ -7,7 +7,7 @@
  * `<form enctype="text/plain">` on an attacker's page can deliver a JSON body to
  * /api/auth/login with no CORS preflight, and the browser stores the Set-Cookie
  * it gets back: login CSRF, which drops a victim into the attacker's account on
- * a console where they may then create objects or paste secrets.
+ * a dashboard where they may then create objects or paste secrets.
  *
  * Both signals we check are set by the browser and unforgeable from page script:
  * `Sec-Fetch-Site` (all current browsers) and `Origin` (sent on any POST). A
@@ -27,7 +27,7 @@ function expectedHosts(h: Headers): string[] {
 /**
  * True when the request demonstrably came from another site. `same-site` counts
  * as cross-site here: a sibling subdomain is a different trust boundary than
- * this console, and its own forms never need to post here.
+ * this dashboard, and its own forms never need to post here.
  */
 export function isCrossSite(req: Request): boolean {
   const h = req.headers;

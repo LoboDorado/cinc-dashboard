@@ -1,10 +1,10 @@
-# Cinc Console Login Troubleshooting & Fix
+# Cinc Dashboard Login Troubleshooting & Fix
 
 ## Investigation Summary
 
 ### Problem
 
-- Cinc Console login failing with `403 Forbidden` on `POST /authenticate_user`
+- Cinc Dashboard login failing with `403 Forbidden` on `POST /authenticate_user`
 - Server error: "missing create permission"
 - User is an org admin, but still denied
 - Occurs with CINC Server 15.10.114
@@ -17,7 +17,7 @@ The `/authenticate_user` endpoint may have ACL checks that evaluate the **signin
 
 1. **Request signing is correct**: webui key + X-Ops-UserId impersonation headers are properly formatted
 2. **User exists and has permissions**: the user is in the admins group and has org membership
-3. **/containers/users/_acl edge case**: This is a server bug, not related to cinc-console code paths
+3. **/containers/users/_acl edge case**: This is a server bug, not related to cinc-dashboard code paths
 4. **The real issue**: Server's /authenticate_user endpoint requires the signing actor (webui) to have "create" permission on something, not just credential validation
 
 ## Solution: AuthActor Fallback
@@ -67,7 +67,7 @@ export CINC_AUTH_ACTOR=pivotal
 #### **Option 3: In deployment**
 
 ```bash
-helm install cinc-console ./deploy/helm/cinc-console \
+helm install cinc-dashboard ./deploy/helm/cinc-dashboard \
   --set cincServerUrl=https://cinc.example.com \
   --set-file webuiKey=/path/to/webui_priv.pem \
   --set authActor=pivotal
@@ -103,8 +103,8 @@ log level: info, msg: login.success, user: example-user
 
 ### Helm Configuration
 
-1. **deploy/helm/cinc-console/templates/configmap.yaml**: Added CINC_AUTH_ACTOR env var
-2. **deploy/helm/cinc-console/values.yaml**: Documented authActor option
+1. **deploy/helm/cinc-dashboard/templates/configmap.yaml**: Added CINC_AUTH_ACTOR env var
+2. **deploy/helm/cinc-dashboard/values.yaml**: Documented authActor option
 
 ### Tests
 
@@ -117,7 +117,7 @@ log level: info, msg: login.success, user: example-user
 
 ```bash
 # Deploy normally - no change to existing behavior
-helm install cinc-console ./deploy/helm/cinc-console \
+helm install cinc-dashboard ./deploy/helm/cinc-dashboard \
   --set cincServerUrl=https://cinc.example.com \
   --set-file webuiKey=/path/to/webui_priv.pem
 ```
@@ -126,7 +126,7 @@ helm install cinc-console ./deploy/helm/cinc-console \
 
 ```bash
 # Deploy with fallback
-helm install cinc-console ./deploy/helm/cinc-console \
+helm install cinc-dashboard ./deploy/helm/cinc-dashboard \
   --set cincServerUrl=https://cinc.example.com \
   --set-file webuiKey=/path/to/webui_priv.pem \
   --set authActor=pivotal
@@ -150,7 +150,7 @@ Enable verbose logging to see the auth flow:
 3. Check pod logs:
 
    ```bash
-   kubectl logs -f deployment/cinc-console | grep -E "cinc.auth|login"
+   kubectl logs -f deployment/cinc-dashboard | grep -E "cinc.auth|login"
    ```
 
 4. Expected log sequence:
@@ -252,7 +252,7 @@ When testing against [cinc-server-ng](https://github.com/cinc-project/cinc-serve
 # cinc-server-ng in one terminal, from its repo (listens on 127.0.0.1:8889)
 cinc-server-ng --state dev/test-repo --key-out /tmp/webui.pem
 
-# Then in cinc-console with fallback disabled (default), and log in as tim / tim123:
+# Then in cinc-dashboard with fallback disabled (default), and log in as tim / tim123:
 CINC_SERVER_URL=http://127.0.0.1:8889 \
 CINC_WEBUI_KEY=$(cat /tmp/webui.pem) \
 pnpm dev

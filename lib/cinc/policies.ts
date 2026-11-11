@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { cincRequest } from "./client";
 import { cincPath } from "./path";
 
@@ -20,13 +21,10 @@ export function parsePolicyRevisions(data: unknown): string[] {
 
 /** Revision ids for a policy (`GET /policies/NAME`). */
 export async function listPolicyRevisions(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   name: string,
 ): Promise<string[]> {
-  const data = await cincRequest<Record<string, unknown>>({
-    user,
-    org,
+  const data = await cincRequest<Record<string, unknown>>(ctx, {
     method: "GET",
     path: cincPath`/policies/${name}`,
   });
@@ -35,14 +33,11 @@ export async function listPolicyRevisions(
 
 /** Delete a single policy revision (`DELETE /policies/NAME/revisions/REV`). */
 export async function deletePolicyRevision(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   name: string,
   revision: string,
 ): Promise<void> {
-  await cincRequest({
-    user,
-    org,
+  await cincRequest(ctx, {
     method: "DELETE",
     path: cincPath`/policies/${name}/revisions/${revision}`,
   });
@@ -52,13 +47,9 @@ export async function deletePolicyRevision(
  * Delete an entire policy. Like cookbooks, Chef has no whole-policy delete;
  * remove every revision sequentially so a mid-way failure surfaces clearly.
  */
-export async function deletePolicy(
-  user: string,
-  org: string,
-  name: string,
-): Promise<void> {
-  const revisions = await listPolicyRevisions(user, org, name);
+export async function deletePolicy(ctx: AuthorizedActionContext, name: string): Promise<void> {
+  const revisions = await listPolicyRevisions(ctx, name);
   for (const revision of revisions) {
-    await deletePolicyRevision(user, org, name, revision);
+    await deletePolicyRevision(ctx, name, revision);
   }
 }

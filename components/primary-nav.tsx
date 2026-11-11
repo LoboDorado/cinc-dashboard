@@ -19,9 +19,9 @@ function navLinkClass(active: boolean): string {
  * The org's section links — one list rendered by both the desktop sidebar and
  * the phone drawer, so the two can't drift apart.
  */
-export function PrimaryNavLinks({ org }: { org: string }) {
+export function PrimaryNavLinks({ server, org }: { server: string; org: string }) {
   const pathname = usePathname();
-  const base = `/orgs/${org}`;
+  const base = `/servers/${server}/orgs/${org}`;
   return (
     <ul className="space-y-1">
       {/* Dashboard is the org root, not an object section, so it lives outside

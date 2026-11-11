@@ -20,7 +20,15 @@ import { trapTab } from "@/components/ui/focus-trap";
  * which makes it the containing block for `position: fixed` descendants, so
  * rendered in place the "full-screen" drawer would be clipped to the header.
  */
-export function MobileNav({ org, displayName }: { org: string; displayName: string }) {
+export function MobileNav({
+  server,
+  org,
+  displayName,
+}: {
+  server: string;
+  org: string;
+  displayName: string;
+}) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -103,7 +111,7 @@ export function MobileNav({ org, displayName }: { org: string; displayName: stri
                 </button>
               </div>
               <nav aria-label="Primary" className="flex-1 overflow-y-auto p-3">
-                <PrimaryNavLinks org={org} />
+                <PrimaryNavLinks server={server} org={org} />
               </nav>
               <div className="border-t border-border px-4 py-3">
                 <UserMenu name={displayName} />

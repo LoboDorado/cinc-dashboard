@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { cincRequest } from "./client";
 import { cincPath } from "./path";
 
@@ -8,20 +9,10 @@ import { cincPath } from "./path";
  */
 function readOnlyResource(kind: string) {
   return {
-    list: (u: string, o: string) =>
-      cincRequest<Record<string, unknown>>({
-        user: u,
-        org: o,
-        method: "GET",
-        path: cincPath`/${kind}`,
-      }),
-    get: (u: string, o: string, name: string) =>
-      cincRequest<unknown>({
-        user: u,
-        org: o,
-        method: "GET",
-        path: cincPath`/${kind}/${name}`,
-      }),
+    list: (ctx: AuthorizedActionContext) =>
+      cincRequest<Record<string, unknown>>(ctx, { method: "GET", path: cincPath`/${kind}` }),
+    get: (ctx: AuthorizedActionContext, name: string) =>
+      cincRequest<unknown>(ctx, { method: "GET", path: cincPath`/${kind}/${name}` }),
   };
 }
 

@@ -18,7 +18,7 @@ async function scan(page: Page) {
   expect(summary).toEqual([]);
 }
 
-// The console ships a single (dark) theme, so one pass covers it.
+// The dashboard ships a single (dark) theme, so one pass covers it.
 test("login page has no WCAG AA violations", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

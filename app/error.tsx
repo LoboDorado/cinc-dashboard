@@ -26,7 +26,7 @@ export default function Error({
       <div className="max-w-md rounded-lg border border-border bg-surface p-6 text-center">
         <h1 className="mb-2 text-lg font-semibold">Something went wrong</h1>
         <p className="mb-5 text-sm text-muted">
-          The console hit an unexpected error talking to the Cinc server. This is
+          The dashboard hit an unexpected error talking to the Cinc server. This is
           usually transient — try again.
         </p>
         <Button onClick={reset}>Try again</Button>

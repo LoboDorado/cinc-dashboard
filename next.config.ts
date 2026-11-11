@@ -8,7 +8,7 @@ import type { NextConfig } from "next";
  * document with privileges.
  *
  * `Strict-Transport-Security` is ignored by browsers on plain-HTTP responses, so
- * it is safe to send unconditionally — it only takes effect once the console is
+ * it is safe to send unconditionally — it only takes effect once the dashboard is
  * actually served over TLS, which is the deployment the Helm chart assumes.
  */
 const securityHeaders = [

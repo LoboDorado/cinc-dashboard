@@ -1,7 +1,7 @@
 name: release
 
 # Publish a multi-arch container image for a release.
-# The image goes to GHCR under the repository owner: ghcr.io/<owner>/cinc-console.
+# The image goes to GHCR under the repository owner: ghcr.io/<owner>/cinc-dashboard.
 #
 # Two entry points, both converging on one bare-semver version:
 #   - workflow_call from tag-release.yml, right after it tags a merged release PR
@@ -87,7 +87,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository_owner }}/cinc-console
+          images: ghcr.io/${{ github.repository_owner }}/cinc-dashboard
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=${{ steps.version.outputs.minor }},enable=${{ steps.version.outputs.prerelease == 'false' }}
@@ -115,9 +115,9 @@ jobs:
 
       # A second, Sigstore-signed SLSA provenance attestation recorded in GitHub's
       # transparency log and pushed alongside the image. Verify with:
-      #   gh attestation verify oci://ghcr.io/<owner>/cinc-console:<tag> --owner <owner>
+      #   gh attestation verify oci://ghcr.io/<owner>/cinc-dashboard:<tag> --owner <owner>
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-name: ghcr.io/${{ github.repository_owner }}/cinc-console
+          subject-name: ghcr.io/${{ github.repository_owner }}/cinc-dashboard
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true

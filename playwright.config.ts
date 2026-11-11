@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests against a real cinc-server-ng. Run them with `make e2e`
-// (scripts/e2e.sh), which boots the server, exports the console's env, and
+// (scripts/e2e.sh), which boots the server, exports the dashboard's env, and
 // calls Playwright; this file alone does not start a Cinc server.
 const port = Number(process.env.E2E_PORT ?? 3100);
 // localhost, not 127.0.0.1: Chromium treats it as a secure context, so the

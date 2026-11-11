@@ -1,5 +1,5 @@
-# TLS front end for cinc-console ("proxy" profile).
-{$CINC_CONSOLE_HOST} {
+# TLS front end for cinc-dashboard ("proxy" profile).
+{$CINC_DASHBOARD_HOST} {
 	# Default: a certificate from your own PKI, placed in ./certs/
 	# Alternatives:
 	#   - remove the "tls" line   -> automatic public ACME certificate
@@ -12,7 +12,7 @@
 	tls /certs/fullchain.pem /certs/privkey.pem
 
 	encode zstd gzip
-	reverse_proxy cinc-console:3000
+	reverse_proxy cinc-dashboard:3000
 
 	log {
 		output stdout

@@ -2,6 +2,7 @@
 import { expect, test } from "vitest";
 import { safeGet, explainRead } from "./safe-get";
 import { CincError } from "./errors";
+import { AccessDeniedError } from "../admin/access";
 
 test("safeGet returns data on success", async () => {
   expect(await safeGet(async () => ({ a: 1 }))).toEqual({ data: { a: 1 } });
@@ -10,6 +11,13 @@ test("safeGet returns data on success", async () => {
 test("safeGet maps 403 to forbidden", async () => {
   const r = await safeGet(async () => {
     throw new CincError(403, {});
+  });
+  expect(r).toEqual({ error: "forbidden" });
+});
+
+test("safeGet maps a role-grant denial to forbidden", async () => {
+  const r = await safeGet(async () => {
+    throw new AccessDeniedError();
   });
   expect(r).toEqual({ error: "forbidden" });
 });

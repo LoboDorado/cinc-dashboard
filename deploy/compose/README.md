@@ -1,12 +1,12 @@
 # Deploy with Docker Compose
 
-A single-host alternative to the Helm chart in [`../helm/cinc-console`](../helm/cinc-console),
+A single-host alternative to the Helm chart in [`../helm/cinc-dashboard`](../helm/cinc-dashboard),
 with the same defaults and hardening:
 
 | Helm chart | Compose |
 | --- | --- |
-| Deployment + Service | `cinc-console` service (non-root uid 1000, read-only root filesystem, all capabilities dropped, same CPU/memory limits) |
-| ConfigMap | `cinc-console.env` |
+| Deployment + Service | `cinc-dashboard` service (non-root uid 1000, read-only root filesystem, all capabilities dropped, same CPU/memory limits) |
+| ConfigMap | `cinc-dashboard.env` |
 | Secret | `./secrets/*`, mounted as Compose secrets |
 | Ingress | optional `caddy` service (`proxy` profile) terminating TLS |
 
@@ -16,9 +16,15 @@ this directory.
 ## 1. Configure
 
 ```bash
-cp cinc-console.env.example cinc-console.env   # set CINC_SERVER_URL at least
+cp cinc-dashboard.env.example cinc-dashboard.env   # set CINC_SERVER_URL and CINC_DASHBOARD_DATABASE_URL at least
 cp .env.example .env                            # optional: bind address, Caddy hostname
 ```
+
+`CINC_DASHBOARD_DATABASE_URL` points at a Postgres instance for the
+dashboard's own admin-plane data (accounts, registered servers/collectors,
+role grants, audit log) — not provided by this compose file. Point it at a
+Postgres you already run, and apply the schema once with
+`CINC_DASHBOARD_DATABASE_URL=… node scripts/migrate.mjs` from the repo root.
 
 Comment out a setting you don't need instead of leaving it empty: the app
 validates its configuration at boot, and an empty value is not the same as an
@@ -42,18 +48,26 @@ scp root@cinc-server:/etc/opscode/webui_priv.pem secrets/webui_priv.pem
 # regenerating it signs everyone out.
 openssl rand -base64 48 | tr -d '\n' > secrets/session_secret
 
+# Encrypts secrets at rest in the dashboard's own database (registered
+# servers' webui keys, registered collectors' bearer tokens): 32+ characters,
+# separate from session_secret above so rotating one doesn't force
+# re-encrypting the other. Keep it stable — regenerating it makes every
+# already-stored secret undecryptable.
+openssl rand -base64 48 | tr -d '\n' > secrets/dashboard_encryption_key
+
 # The container runs as uid 1000, like the chart's securityContext
 sudo chown 1000:1000 secrets/*
 sudo chmod 400 secrets/*
 ```
 
 The Helm chart generates `SESSION_SECRET` for you; here you create it once.
-The console reads it through `SESSION_SECRET_FILE`, which strips one trailing
-newline, so `echo secret > secrets/session_secret` works too.
-`secrets/`, `certs/` and `cinc-console.env` are gitignored.
+The dashboard reads it through `SESSION_SECRET_FILE`, which strips one trailing
+newline, so `echo secret > secrets/session_secret` works too (same for
+`dashboard_encryption_key`).
+`secrets/`, `certs/` and `cinc-dashboard.env` are gitignored.
 
-The webui key lets the console act as any user on the Cinc server, so keep the
-console off untrusted networks: by default it is published on `127.0.0.1:3000`
+The webui key lets the dashboard act as any user on the Cinc server, so keep the
+dashboard off untrusted networks: by default it is published on `127.0.0.1:3000`
 only.
 
 ## 3. Start
@@ -64,8 +78,8 @@ docker compose ps        # wait for "healthy"
 ```
 
 This runs the published image for this checkout's release,
-`ghcr.io/cinc-project/cinc-console:<version>`. To pin another tag or a digest,
-set `CINC_CONSOLE_IMAGE` in `.env`. To build the image from this checkout
+`ghcr.io/cinc-project/cinc-dashboard:<version>`. To pin another tag or a digest,
+set `CINC_DASHBOARD_IMAGE` in `.env`. To build the image from this checkout
 instead (local changes, a private npm registry), add `compose.build.yaml`:
 
 ```bash
@@ -75,16 +89,16 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ## TLS
 
 The session cookie carries the `Secure` flag in production, so browsers must
-reach the console over HTTPS. For a quick test, an SSH tunnel to
+reach the dashboard over HTTPS. For a quick test, an SSH tunnel to
 `http://localhost:3000` works too, since browsers treat `localhost` as secure.
 
 **With the bundled Caddy:** put your certificate in `certs/fullchain.pem` and
-`certs/privkey.pem` (or edit `Caddyfile` to use ACME), set `CINC_CONSOLE_HOST`
+`certs/privkey.pem` (or edit `Caddyfile` to use ACME), set `CINC_DASHBOARD_HOST`
 in `.env`, then:
 
 ```bash
 # Caddy runs as root with every capability dropped, so it can only read
-# files root owns. The console (uid 1000) also reads any CA you put here.
+# files root owns. The dashboard (uid 1000) also reads any CA you put here.
 sudo chown -R root:root certs
 sudo chmod 755 certs && sudo chmod 644 certs/*.pem
 sudo chmod 600 certs/privkey.pem
@@ -109,23 +123,23 @@ Traefik needs no header settings: it passes `Host` through and sets
 ```yaml
 http:
   routers:
-    cinc-console:
-      rule: Host(`cinc-console.example.com`)
+    cinc-dashboard:
+      rule: Host(`cinc-dashboard.example.com`)
       entryPoints: [websecure]
-      service: cinc-console
+      service: cinc-dashboard
       tls: {}
   services:
-    cinc-console:
+    cinc-dashboard:
       loadBalancer:
         servers:
           - url: "http://10.0.0.20:3000"
 ```
 
-The console is published on `127.0.0.1:3000` by default, which a Traefik
-running in another container can't reach. Set `CINC_CONSOLE_BIND` in `.env`
+The dashboard is published on `127.0.0.1:3000` by default, which a Traefik
+running in another container can't reach. Set `CINC_DASHBOARD_BIND` in `.env`
 to an address Traefik can reach (for example `10.0.0.20:3000`, the host's
 LAN address above), or attach both containers to a shared Docker network and
-point the route at `http://cinc-console:3000`.
+point the route at `http://cinc-dashboard:3000`.
 
 ## Private CA and LDAP
 
@@ -133,7 +147,7 @@ point the route at `http://cinc-console:3000`.
   `certs/cinc-ca.pem` (readable by uid 1000, for example mode 644) and
   uncomment `CINC_CA_CERT_FILE` and the matching `volumes` entry in
   `compose.yaml`.
-- **`AUTH_MODE=ldap`:** set the `LDAP_*` values in `cinc-console.env`. For a
+- **`AUTH_MODE=ldap`:** set the `LDAP_*` values in `cinc-dashboard.env`. For a
   service-account bind, create the password file without a trailing newline
   (it is read verbatim), then uncomment `LDAP_BIND_PASSWORD_FILE` and the
   `ldap_bind_password` secret in `compose.yaml`:

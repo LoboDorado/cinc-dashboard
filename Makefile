@@ -1,9 +1,9 @@
-# cinc-console developer tasks.
+# cinc-dashboard developer tasks.
 # Run `make help` for a list.
 
-IMAGE ?= ghcr.io/cinc-project/cinc-console
+IMAGE ?= ghcr.io/cinc-project/cinc-dashboard
 TAG ?= dev
-CHART := deploy/helm/cinc-console
+CHART := deploy/helm/cinc-dashboard
 
 .DEFAULT_GOAL := help
 

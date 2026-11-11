@@ -1,0 +1,38 @@
+# Minimal working configuration.
+#   helm install cinc-dashboard ./deploy/helm/cinc-dashboard \
+#     -f values-example.yaml \
+#     --set-file webuiKey=/etc/opscode/webui_priv.pem
+
+cincServerUrl: https://chef.example.com
+
+# Provide the webui private key (here via --set-file, shown inline for clarity):
+# webuiKey: |
+#   -----BEGIN RSA PRIVATE KEY-----
+#   ...
+#   -----END RSA PRIVATE KEY-----
+
+# sessionSecret and dashboardEncryptionKey are auto-generated when empty.
+
+# The dashboard's own Postgres database (accounts, registered
+# servers/collectors, role grants, audit log) — required, not auto-provisioned.
+dashboardDatabaseUrl: postgres://user:password@postgres.example.com:5432/cinc_dashboard
+
+# Optional: verify logins against a directory instead of the Cinc server's
+# own password check (uncomment to enable). The submitted username must
+# already exist as a Cinc user object either way.
+# authMode: ldap
+# ldap:
+#   url: ldaps://dc1.example.com:636
+#   baseDn: dc=example,dc=com
+#   bindDn: cn=svc-cinc-dashboard,ou=service-accounts,dc=example,dc=com
+#   bindPassword: "" # set here, via --set, or via existingSecret's LDAP_BIND_PASSWORD
+#   userFilter: (sAMAccountName={{username}}) # Active Directory; default (uid={{username}}) suits OpenLDAP
+
+ingress:
+  enabled: true
+  className: nginx
+  host: cinc-dashboard.example.com
+  tls:
+    - secretName: cinc-dashboard-tls
+      hosts:
+        - cinc-dashboard.example.com
