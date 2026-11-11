@@ -1,15 +1,21 @@
-// Next.js 16 Proxy (formerly "middleware"). Two jobs:
+// Next.js 16 Proxy (formerly "middleware"). Three jobs:
 //
-//  1. A presence check on the session cookie that gates the app. The real
-//     authorization is the cinc server's ACLs; this only keeps unauthenticated
-//     users out of the UI shell.
-//  2. A per-request Content-Security-Policy nonce. This is a privileged console
+//  1. Before anything else is checked: if no dashboard account exists yet
+//     anywhere, every request except /setup itself bounces there. A
+//     stale/foreign session cookie proves nothing once the account table is
+//     empty.
+//  2. A presence check on the session cookie that gates the app. The real
+//     authorization is each registered Cinc Server's own role-grant-backed
+//     decision (lib/admin/access.ts); this only keeps unauthenticated users
+//     out of the UI shell.
+//  3. A per-request Content-Security-Policy nonce. This is a privileged dashboard
 //     that renders server-authored JSON (node attributes, data bag items), so the
 //     value of a strict CSP is containment: even if some future sink injected
 //     markup, a nonce + 'strict-dynamic' policy leaves an attacker no way to run
 //     script, load one, reframe the page, or post a form off-site.
 import { NextRequest, NextResponse } from "next/server";
 import { isInternalPath } from "./lib/safe-redirect";
+import { isSetupNeeded } from "./lib/dashboard/setup";
 
 /**
  * Build the CSP for one request. Next.js reads the nonce back out of this header
@@ -37,11 +43,33 @@ function contentSecurityPolicy(nonce: string, isDev: boolean): string {
   ].join("; ");
 }
 
-export function proxy(request: NextRequest) {
+/** Attaches the nonce (request header, for SSR) and CSP (response header) to a `next()`. */
+function proceed(request: NextRequest, nonce: string, csp: string): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
+  return response;
+}
+
+export async function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV === "development");
+  const isSetupPage = request.nextUrl.pathname.startsWith("/setup");
 
-  const hasSession = request.cookies.has("cinc_console");
+  if (!isSetupPage && (await isSetupNeeded())) {
+    return NextResponse.redirect(new URL("/setup", request.url));
+  }
+  // Once accounts exist, /setup has nothing left to do; its own page-level
+  // check (isSetupNeeded again) redirects to /login. Either way it never
+  // needs the session checks below.
+  if (isSetupPage) {
+    return proceed(request, nonce, csp);
+  }
+
+  const hasSession = request.cookies.has("cinc_dashboard");
   const isAuthPage = request.nextUrl.pathname.startsWith("/login");
 
   if (!hasSession && !isAuthPage) {
@@ -53,18 +81,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   if (hasSession && isAuthPage) {
-    return NextResponse.redirect(new URL(safeFrom(request) ?? "/orgs", request.url));
+    return NextResponse.redirect(new URL(safeFrom(request) ?? "/servers", request.url));
   }
 
-  // The nonce travels on the *request* headers — that's the channel Next.js
-  // reads it from while rendering — and on the response for the browser.
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
-
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set("Content-Security-Policy", csp);
-  return response;
+  return proceed(request, nonce, csp);
 }
 
 /**

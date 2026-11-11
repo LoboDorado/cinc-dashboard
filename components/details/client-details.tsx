@@ -10,7 +10,7 @@ import {
 
 /**
  * Curated read-only view of an API client: its flags and public key. Clients
- * are read-only in the console, so there is nothing to edit here.
+ * are read-only in the dashboard, so there is nothing to edit here.
  */
 export function ClientDetails({ data }: { data: unknown }) {
   const client = isRecord(data) ? data : {};

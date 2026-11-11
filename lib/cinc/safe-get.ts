@@ -1,4 +1,5 @@
 import "server-only";
+import { AccessDeniedError } from "../admin/access";
 import { isCincError } from "./errors";
 import { isUnsafePathError } from "./path";
 
@@ -9,6 +10,9 @@ export async function safeGet<T>(fn: () => Promise<T>): Promise<Fetched<T>> {
   try {
     return { data: await fn() };
   } catch (e) {
+    // A role-grant denial (lib/admin/access.ts) reads to the user exactly
+    // like the server's own 403 — both just mean "no permission."
+    if (e instanceof AccessDeniedError) return { error: "forbidden" };
     if (isCincError(e)) {
       if (e.forbidden) return { error: "forbidden" };
       if (e.notFound) return { error: "not found" };

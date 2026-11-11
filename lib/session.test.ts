@@ -26,7 +26,7 @@ function withNodeEnv(value: string, fn: () => void) {
 
 test("session cookie is httpOnly, lax, and ttl-bound", () => {
   const o = buildSessionOptions();
-  expect(o.cookieName).toBe("cinc_console");
+  expect(o.cookieName).toBe("cinc_dashboard");
   expect(o.ttl).toBe(100);
   expect(o.cookieOptions?.httpOnly).toBe(true);
   expect(o.cookieOptions?.sameSite).toBe("lax");

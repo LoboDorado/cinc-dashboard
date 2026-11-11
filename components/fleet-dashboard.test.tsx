@@ -5,7 +5,7 @@ import { axe } from "@/test/axe";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => "/orgs/acme",
+  usePathname: () => "/servers/s1/orgs/acme",
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -56,7 +56,9 @@ const snapshot = buildSnapshot(
 );
 
 function renderDashboard() {
-  return render(<FleetDashboard org="acme" initial={snapshot} initialError={null} />);
+  return render(
+    <FleetDashboard server="s1" org="acme" initial={snapshot} initialError={null} />,
+  );
 }
 
 // Each node renders twice — a phone card list and the sm+ table — with CSS

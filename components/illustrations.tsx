@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /**
- * Line-art spot illustrations for empty states. Inline SVG (the console runs
+ * Line-art spot illustrations for empty states. Inline SVG (the dashboard runs
  * air-gapped, so no image CDN) drawn in theme tokens: the main strokes follow
  * `currentColor` (EmptyState sets it to the link color), secondary strokes are
  * muted, and accents use primary/success. Purely decorative — EmptyState wraps

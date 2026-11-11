@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { safeGet, type Fetched } from "./safe-get";
 import { fetchFleetNodes } from "./search";
 import { getClientLifecycle } from "./client-lifecycle";
@@ -12,12 +13,11 @@ import { buildSnapshot, type FleetSnapshot } from "./fleet";
  * compute identical numbers.
  */
 export async function loadFleetSnapshot(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   nowMs: number,
 ): Promise<Fetched<FleetSnapshot>> {
   const [fleetRes, lifecycle] = await Promise.all([
-    safeGet(() => fetchFleetNodes(user, org)),
+    safeGet(() => fetchFleetNodes(ctx)),
     getClientLifecycle(nowMs),
   ]);
   if ("error" in fleetRes) return fleetRes;

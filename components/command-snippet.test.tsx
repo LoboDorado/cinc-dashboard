@@ -24,7 +24,7 @@ describe("CommandSnippet", () => {
     render(<CommandSnippet commands={COMMANDS} />);
     await userEvent.click(screen.getByRole("tab", { name: "knife" }));
     expect(screen.getByRole("tabpanel")).toHaveTextContent("knife cookbook upload COOKBOOK");
-    expect(window.localStorage.getItem("cinc-console.cli-tool")).toBe("knife");
+    expect(window.localStorage.getItem("cinc-dashboard.cli-tool")).toBe("knife");
   });
 
   it("flips every snippet on the page together", async () => {

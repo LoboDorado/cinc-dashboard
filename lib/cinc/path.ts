@@ -8,8 +8,8 @@ import "server-only";
  * is interpolated into a path that `cincRequest` then SIGNS with the webui key.
  * Chef's v1.3 canonical string covers the path only, and the server canonicalizes
  * the path it *received and decoded*. A name carrying a separator or an escape
- * therefore lets a logged-in user aim a console-signed request at an endpoint the
- * console deliberately never exposes — `/nodes/<name>/_acl`, a sibling object
+ * therefore lets a logged-in user aim a dashboard-signed request at an endpoint the
+ * dashboard deliberately never exposes — `/nodes/<name>/_acl`, a sibling object
  * family, a top-level `/users/...` — instead of the one the UI implies.
  *
  * Next.js makes that trivially reachable from the address bar: it percent-decodes

@@ -12,7 +12,7 @@ export function LoginForm() {
   const params = useSearchParams();
   // Return to where the session expired, but only to an internal path.
   const from = params.get("from");
-  const dest = isInternalPath(from) ? from : "/orgs";
+  const dest = isInternalPath(from) ? from : "/servers";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

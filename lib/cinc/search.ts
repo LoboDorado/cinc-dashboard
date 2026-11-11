@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { cincRequest } from "./client";
 import { cincPath } from "./path";
 import type { FleetNode } from "./fleet";
@@ -21,17 +22,14 @@ const PAGE_ROWS = 1000;
 const MAX_PAGES = 50;
 
 export async function partialSearch<T>(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   index: string,
   keys: Record<string, string[]>,
   query = "*:*",
 ): Promise<T[]> {
   const out: T[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
-    const res = await cincRequest<SearchResponse<T>>({
-      user,
-      org,
+    const res = await cincRequest<SearchResponse<T>>(ctx, {
       method: "POST",
       path: cincPath`/search/${index}`,
       query: { q: query, rows: PAGE_ROWS, start: page * PAGE_ROWS },
@@ -57,14 +55,11 @@ export async function partialSearch<T>(
  * field-by-field sweep (partialSearch) is slow.
  */
 export async function searchTotal(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   index: string,
   query: string,
 ): Promise<number> {
-  const res = await cincRequest<SearchResponse<unknown>>({
-    user,
-    org,
+  const res = await cincRequest<SearchResponse<unknown>>(ctx, {
     method: "POST",
     path: cincPath`/search/${index}`,
     query: { q: query, rows: 0, start: 0 },
@@ -122,10 +117,7 @@ export function parseFleetRow(row: RawFleetRow): FleetNode {
 }
 
 /** Fetch every node in the org as a FleetNode via one partial search sweep. */
-export async function fetchFleetNodes(
-  user: string,
-  org: string,
-): Promise<FleetNode[]> {
-  const rows = await partialSearch<RawFleetRow>(user, org, "node", FLEET_KEYS);
+export async function fetchFleetNodes(ctx: AuthorizedActionContext): Promise<FleetNode[]> {
+  const rows = await partialSearch<RawFleetRow>(ctx, "node", FLEET_KEYS);
   return rows.map(parseFleetRow);
 }

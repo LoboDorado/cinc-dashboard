@@ -1,31 +1,88 @@
-# cinc-console with Docker Compose
+# cinc-dashboard with Docker Compose
 #
-# A single-host equivalent of the Helm chart in deploy/helm/cinc-console:
-#   Deployment + Service  -> service "cinc-console"
-#   ConfigMap             -> cinc-console.env (env_file)
+# A single-host equivalent of the Helm chart in deploy/helm/cinc-dashboard:
+#   Deployment + Service  -> service "cinc-dashboard"
+#   ConfigMap             -> cinc-dashboard.env (env_file)
 #   Secret                -> ./secrets/* (Compose secrets, mounted as files)
 #   Ingress (TLS)         -> service "caddy" (optional "proxy" profile)
+# Not in the chart (which deliberately doesn't bundle a database):
+#   "postgres" (the dashboard's own admin-plane data) and "migrate" (a
+#   one-shot that applies the schema, which "cinc-dashboard" waits on).
 #
 # See README.md in this directory for the setup steps. In short:
-#   cp cinc-console.env.example cinc-console.env   # then edit it
+#   cp cinc-dashboard.env.example cinc-dashboard.env   # then edit it
 #   # put webui_priv.pem and a session secret in ./secrets/ (see README.md)
-#   docker compose up -d                            # console on 127.0.0.1:3000
+#   docker compose up -d                            # dashboard on 127.0.0.1:3000
 #   docker compose --profile proxy up -d            # plus Caddy for TLS
+#
+# First boot prints a one-time setup token to the logs (no standing bootstrap
+# admin): docker compose logs cinc-dashboard | grep -A2 "no accounts exist
+# yet", then visit /setup with it to create the first account.
 #
 # That runs the published release. To build this checkout instead, add
 # compose.build.yaml: docker compose -f compose.yaml -f compose.build.yaml up -d --build
 
-name: cinc-console
+name: cinc-dashboard
 
 services:
-  cinc-console:
+  # Local/dev-parity Postgres for the dashboard's own admin-plane data
+  # (accounts, registered servers/collectors, role grants, audit log) --
+  # unrelated to cinc-collector's own database. The Helm chart deliberately
+  # does NOT bundle one (simpler chart, avoids accidental data loss from a
+  # bundled stateful pod); Compose is single-host already, so bundling one
+  # here is a convenience, not a requirement. Point CINC_DASHBOARD_DATABASE_URL
+  # at your own managed Postgres instead for anything you care about keeping,
+  # and remove this service and "migrate" below.
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      # Matches the default CINC_DASHBOARD_DATABASE_URL in
+      # cinc-dashboard.env.example. Change both together if this host isn't
+      # trusted -- this password isn't a Compose secret, since it's only
+      # reachable from other containers on this project's own network, never
+      # published to the host.
+      POSTGRES_USER: cinc_dashboard
+      POSTGRES_PASSWORD: cinc_dashboard
+      POSTGRES_DB: cinc_dashboard
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinc_dashboard -d cinc_dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # One-shot: applies lib/db/migrations/ once, then exits. cinc-dashboard
+  # waits for this to succeed before it starts (below) -- there's no
+  # standing bootstrap admin, so a schema that doesn't exist yet would fail
+  # every request, not just degrade gracefully.
+  migrate:
+    image: ${CINC_DASHBOARD_IMAGE:-ghcr.io/cinc-project/cinc-dashboard:0.9.0}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./cinc-dashboard.env
+    command: ["node", "scripts/migrate.mjs"]
+
+  cinc-dashboard:
     # The published release matching this checkout (bumped by
-    # scripts/set-version.mjs at release time). Set CINC_CONSOLE_IMAGE in .env
+    # scripts/set-version.mjs at release time). Set CINC_DASHBOARD_IMAGE in .env
     # to pin another tag or digest; compose.build.yaml builds this checkout.
-    image: ${CINC_CONSOLE_IMAGE:-ghcr.io/cinc-project/cinc-console:0.9.0}
+    image: ${CINC_DASHBOARD_IMAGE:-ghcr.io/cinc-project/cinc-dashboard:0.9.0}
 
     restart: unless-stopped
     init: true # tini as PID 1, for clean signal handling and zombie reaping
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
     # Same hardening as the chart's securityContext.
     user: "1000:1000"
@@ -40,9 +97,9 @@ services:
       - /app/.next/cache:size=128m,mode=1777
 
     env_file:
-      - ./cinc-console.env
+      - ./cinc-dashboard.env
     environment:
-      # Container-specific values: keep them here, not in cinc-console.env.
+      # Container-specific values: keep them here, not in cinc-dashboard.env.
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: "3000"
@@ -50,20 +107,22 @@ services:
       # Read from the Compose secret, so the value stays out of
       # `docker inspect` and out of this file.
       SESSION_SECRET_FILE: /run/secrets/session_secret
+      CINC_DASHBOARD_ENCRYPTION_KEY_FILE: /run/secrets/dashboard_encryption_key
       # Cinc server with a self-signed or private-CA certificate:
-      # CINC_CA_CERT_FILE: /etc/cinc-console/cinc-ca.pem
+      # CINC_CA_CERT_FILE: /etc/cinc-dashboard/cinc-ca.pem
       # AUTH_MODE=ldap with a service account:
       # LDAP_BIND_PASSWORD_FILE: /run/secrets/ldap_bind_password
-      # LDAP_CA_CERT_FILE: /etc/cinc-console/ldap-ca.pem
+      # LDAP_CA_CERT_FILE: /etc/cinc-dashboard/ldap-ca.pem
 
     secrets:
       - source: webui_key
       - source: session_secret
+      - source: dashboard_encryption_key
       # - source: ldap_bind_password
 
     # volumes:
-    #   - ./certs/cinc-ca.pem:/etc/cinc-console/cinc-ca.pem:ro
-    #   - ./certs/ldap-ca.pem:/etc/cinc-console/ldap-ca.pem:ro
+    #   - ./certs/cinc-ca.pem:/etc/cinc-dashboard/cinc-ca.pem:ro
+    #   - ./certs/ldap-ca.pem:/etc/cinc-dashboard/ldap-ca.pem:ro
 
     # When the Cinc server's FQDN only resolves on your network:
     # extra_hosts:
@@ -71,8 +130,8 @@ services:
 
     ports:
       # Loopback only by default: the session cookie is Secure in production,
-      # so browsers must reach the console over HTTPS (or via localhost).
-      - "${CINC_CONSOLE_BIND:-127.0.0.1:3000}:3000"
+      # so browsers must reach the dashboard over HTTPS (or via localhost).
+      - "${CINC_DASHBOARD_BIND:-127.0.0.1:3000}:3000"
 
     # Same endpoint and timing as the chart's livenessProbe (every 20s, three
     # failures). Docker only marks a container unhealthy and never restarts
@@ -120,10 +179,10 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
-      cinc-console:
+      cinc-dashboard:
         condition: service_healthy
     environment:
-      CINC_CONSOLE_HOST: ${CINC_CONSOLE_HOST:-cinc-console.example.com}
+      CINC_DASHBOARD_HOST: ${CINC_DASHBOARD_HOST:-cinc-dashboard.example.com}
     ports:
       - "80:80"
       - "443:443"
@@ -150,11 +209,14 @@ secrets:
     file: ./secrets/webui_priv.pem
   session_secret:
     file: ./secrets/session_secret
+  dashboard_encryption_key:
+    file: ./secrets/dashboard_encryption_key
   # Read verbatim, trailing newline included: create it with
   #   printf '%s' 'the-password' > secrets/ldap_bind_password
   # ldap_bind_password:
   #   file: ./secrets/ldap_bind_password
 
 volumes:
+  postgres_data:
   caddy_data:
   caddy_config:

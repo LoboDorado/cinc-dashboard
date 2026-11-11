@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # End-to-end run: boot a throwaway cinc-server-ng (the Go successor to
-# cinc-zero) from the e2e/fixtures/state seed, point the console at it, and run
-# the Playwright suite. Extra arguments go to `playwright test`.
+# cinc-zero) from the e2e/fixtures/state seed and a throwaway Postgres, seed
+# the dashboard accounts the suite logs in as, start the dashboard itself,
+# and run the Playwright suite against it. This script owns the dashboard's
+# own lifecycle (not Playwright's `webServer`): accounts have to be seeded
+# between "app has booted once and auto-registered the server" and "tests
+# start running," which `webServer` has no hook for. Extra arguments go to
+# `playwright test`.
 #
 #   bash scripts/e2e.sh                 # whole suite
 #   bash scripts/e2e.sh e2e/login.spec.ts --headed
@@ -14,6 +19,8 @@ cd "$(dirname "$0")/.."
 
 CINC_SERVER_NG_VERSION="v0.17.0"
 CINC_PORT="${E2E_CINC_PORT:-8899}"
+APP_PORT="${E2E_PORT:-3100}"
+ORG="acme"
 
 # SHA256SUMS from the cinc-project/cinc-server-ng $CINC_SERVER_NG_VERSION release.
 sha_for() {
@@ -67,10 +74,23 @@ fi
 
 bin="${CINC_SERVER_NG_BIN:-$(install_server)}"
 
+# `pnpm start` wraps `next start` through a couple of shell layers, so killing
+# just its own pid leaves the actual server process (and the port) behind.
+# Kill the whole descendant tree instead.
+kill_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do kill_tree "$child"; done
+  kill "$pid" 2>/dev/null || true
+}
+
 tmp="$(mktemp -d)"
 server_pid=""
+app_pid=""
+pg_container="cinc-dashboard-e2e-pg-$$"
 cleanup() {
+  if [[ -n "$app_pid" ]]; then kill_tree "$app_pid"; fi
   if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi
+  docker rm -f "$pg_container" >/dev/null 2>&1 || true
   rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -106,11 +126,71 @@ CINC_WEBUI_KEY="$(cat "$tmp/webui.pem")"
 export CINC_WEBUI_KEY
 SESSION_SECRET="$(openssl rand -hex 32)"
 export SESSION_SECRET
+CINC_DASHBOARD_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export CINC_DASHBOARD_ENCRYPTION_KEY
+
+echo "==> starting throwaway postgres"
+docker run -d --rm --name "$pg_container" -p 127.0.0.1::5432 \
+  -e POSTGRES_USER=e2e -e POSTGRES_PASSWORD=e2e -e POSTGRES_DB=e2e \
+  postgres:17-alpine >/dev/null
+pg_port="$(docker port "$pg_container" 5432/tcp | head -n1 | cut -d: -f2)"
+CINC_DASHBOARD_DATABASE_URL="postgres://e2e:e2e@127.0.0.1:$pg_port/e2e"
+export CINC_DASHBOARD_DATABASE_URL
+
+for _ in $(seq 1 30); do
+  docker exec "$pg_container" pg_isready -U e2e -d e2e >/dev/null 2>&1 && break
+  sleep 1
+done
+
+echo "==> applying migrations and seeding the platform_admin account"
+node scripts/migrate.mjs
+node e2e/fixtures/seed-accounts.mjs admin
+
+echo "==> building and starting the dashboard on 127.0.0.1:$APP_PORT"
+pnpm build >"$tmp/build.log" 2>&1
+pnpm start --port "$APP_PORT" >"$tmp/app.log" 2>&1 &
+app_pid=$!
+
+for _ in $(seq 1 60); do
+  if curl -fs "http://127.0.0.1:$APP_PORT/api/healthz" >/dev/null; then
+    break
+  fi
+  if ! kill -0 "$app_pid" 2>/dev/null; then
+    echo "dashboard exited early:" >&2
+    cat "$tmp/app.log" >&2
+    exit 1
+  fi
+  sleep 0.5
+done
+if ! curl -fs "http://127.0.0.1:$APP_PORT/api/healthz" >/dev/null; then
+  echo "dashboard did not come up:" >&2
+  cat "$tmp/app.log" >&2
+  exit 1
+fi
+
+# Only exists once instrumentation.ts's startup bootstrap has auto-registered
+# CINC_SERVER_URL as "default" -- an async hook that can finish slightly
+# after /api/healthz starts answering, so retry rather than assume.
+E2E_SERVER_ID=""
+for _ in $(seq 1 30); do
+  E2E_SERVER_ID="$(node e2e/fixtures/seed-accounts.mjs server-id 2>/dev/null || true)"
+  [[ -n "$E2E_SERVER_ID" ]] && break
+  sleep 0.5
+done
+if [[ -z "$E2E_SERVER_ID" ]]; then
+  echo "no registered server appeared after boot:" >&2
+  cat "$tmp/app.log" >&2
+  exit 1
+fi
+export E2E_SERVER_ID
+node e2e/fixtures/seed-accounts.mjs viewer "$E2E_SERVER_ID" "$ORG"
 
 status=0
 pnpm exec playwright test "$@" || status=$?
 if [[ $status -ne 0 ]]; then
   echo "==> cinc-server-ng log (tail)" >&2
   tail -n 50 "$tmp/server.log" >&2 || true
+  echo "==> dashboard log (tail)" >&2
+  tail -n 50 "$tmp/app.log" >&2 || true
 fi
 exit $status

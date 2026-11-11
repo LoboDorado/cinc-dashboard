@@ -10,7 +10,7 @@ const target = (file: string) => {
 };
 
 const PACKAGE_JSON = `{
-  "name": "cinc-console",
+  "name": "cinc-dashboard",
   "version": "0.1.1",
   "private": true,
   "dependencies": {
@@ -21,7 +21,7 @@ const PACKAGE_JSON = `{
 `;
 
 const CHART_YAML = `apiVersion: v2
-name: cinc-console
+name: cinc-dashboard
 type: application
 version: 0.1.1
 appVersion: "0.1.1"
@@ -30,9 +30,9 @@ keywords:
 `;
 
 const COMPOSE_YAML = `services:
-  cinc-console:
+  cinc-dashboard:
     # Published release by default; compose.build.yaml builds this checkout.
-    image: \${CINC_CONSOLE_IMAGE:-ghcr.io/cinc-project/cinc-console:0.1.1}
+    image: \${CINC_DASHBOARD_IMAGE:-ghcr.io/cinc-project/cinc-dashboard:0.1.1}
     restart: unless-stopped
   caddy:
     image: caddy:2-alpine
@@ -93,7 +93,7 @@ describe("Chart.yaml target", () => {
 
   it("leaves the rest of the chart metadata untouched", () => {
     const after = t.set(CHART_YAML, "0.5.0");
-    expect(after).toContain("apiVersion: v2\nname: cinc-console\ntype: application\n");
+    expect(after).toContain("apiVersion: v2\nname: cinc-dashboard\ntype: application\n");
     expect(after).toContain("keywords:\n  - cinc\n");
   });
 
@@ -109,7 +109,7 @@ describe("compose.yaml target", () => {
   it("rewrites the default image tag, keeping the override variable", () => {
     const after = t.set(COMPOSE_YAML, "0.5.0");
     expect(after).toContain(
-      "    image: ${CINC_CONSOLE_IMAGE:-ghcr.io/cinc-project/cinc-console:0.5.0}\n",
+      "    image: ${CINC_DASHBOARD_IMAGE:-ghcr.io/cinc-project/cinc-dashboard:0.5.0}\n",
     );
     expect(inspect(t, after, "0.5.0")).toEqual({ found: ["0.5.0"], ok: true });
   });
@@ -120,7 +120,7 @@ describe("compose.yaml target", () => {
       .split("\n")
       .filter((line: string, i: number) => line !== COMPOSE_YAML.split("\n")[i]);
     expect(changed).toEqual([
-      "    image: ${CINC_CONSOLE_IMAGE:-ghcr.io/cinc-project/cinc-console:0.5.0}",
+      "    image: ${CINC_DASHBOARD_IMAGE:-ghcr.io/cinc-project/cinc-dashboard:0.5.0}",
     ]);
     expect(after).toContain("    image: caddy:2-alpine\n");
   });

@@ -1,122 +1,84 @@
 // @vitest-environment node
 import { expect, test, vi, beforeEach } from "vitest";
-import { CincError } from "@/lib/cinc/errors";
 import type { ProfileDetails } from "./actions";
 
-const { session } = vi.hoisted(() => ({
-  session: { displayName: "", save: vi.fn() },
-}));
-vi.mock("@/lib/session", () => ({
-  requireUser: async () => "anna",
-  getSession: async () => session,
-}));
+vi.mock("@/lib/guard", () => ({ currentAccountId: async () => "acct-1" }));
 
-const { getUser, putUser } = vi.hoisted(() => ({
-  getUser: vi.fn(),
-  putUser: vi.fn(),
+const { updateDisplayName, changeOwnPassword, LdapAccountPasswordError } = vi.hoisted(() => {
+  class LdapAccountPasswordError extends Error {
+    constructor() {
+      super("password is managed by your organization's directory");
+      this.name = "LdapAccountPasswordError";
+    }
+  }
+  return {
+    updateDisplayName: vi.fn(),
+    changeOwnPassword: vi.fn(),
+    LdapAccountPasswordError,
+  };
+});
+vi.mock("@/lib/dashboard/accounts", () => ({
+  updateDisplayName,
+  changeOwnPassword,
+  LdapAccountPasswordError,
 }));
-vi.mock("@/lib/cinc/users", () => ({ getUser, putUser }));
-
-const { getConfigMock } = vi.hoisted(() => ({ getConfigMock: vi.fn() }));
-vi.mock("@/lib/config", () => ({ getConfig: () => getConfigMock() }));
 
 import { saveProfile, changePassword } from "./actions";
 
 beforeEach(() => {
-  getUser.mockReset();
-  putUser.mockReset();
-  session.save.mockReset();
-  session.displayName = "";
-  getUser.mockResolvedValue({ username: "anna", email: "old@x", public_key: "K" });
-  getConfigMock.mockReturnValue({ authMode: "local" });
+  updateDisplayName.mockReset();
+  changeOwnPassword.mockReset();
 });
 
-test("saveProfile merges edits onto the current record", async () => {
-  putUser.mockResolvedValueOnce({});
-  await expect(saveProfile({ email: "new@x" })).resolves.toEqual({ ok: true });
-  expect(putUser).toHaveBeenCalledWith("anna", {
-    username: "anna",
-    email: "new@x",
-    public_key: "K",
-  });
+test("saveProfile updates the account's display name", async () => {
+  await expect(saveProfile({ display_name: "Anna B" })).resolves.toEqual({ ok: true });
+  expect(updateDisplayName).toHaveBeenCalledWith("acct-1", "Anna B");
 });
 
-test("changePassword merges a password onto the current record", async () => {
-  putUser.mockResolvedValueOnce({});
-  await expect(changePassword("s3cret!")).resolves.toEqual({ ok: true });
-  expect(putUser).toHaveBeenCalledWith("anna", {
-    username: "anna",
-    email: "old@x",
-    public_key: "K",
-    password: "s3cret!",
-  });
-});
-
-test("changePassword rejects a short password without calling the server", async () => {
-  await expect(changePassword("123")).resolves.toEqual({
-    error: "password must be at least 6 characters",
-  });
-  expect(putUser).not.toHaveBeenCalled();
-});
-
-test("changePassword is rejected outright when AUTH_MODE=ldap", async () => {
-  getConfigMock.mockReturnValue({ authMode: "ldap" });
-  await expect(changePassword("s3cret!")).resolves.toEqual({
-    error: "password is managed by your organization's directory",
-  });
-  expect(putUser).not.toHaveBeenCalled();
-});
-
-test("saveProfile maps a 403 to forbidden", async () => {
-  putUser.mockRejectedValueOnce(new CincError(403, "no"));
-  await expect(saveProfile({ email: "x@y" })).resolves.toEqual({
-    error: "forbidden",
-  });
-});
-
-test("saveProfile syncs the session display name when it changes", async () => {
-  putUser.mockResolvedValueOnce({});
-  await saveProfile({ display_name: "Anna B" });
-  expect(session.displayName).toBe("Anna B");
-  expect(session.save).toHaveBeenCalled();
-});
-
-test("saveProfile writes only the fields the form owns", async () => {
+test("saveProfile writes only the field the form owns", async () => {
   // A Server Action is a public endpoint and its parameter type is erased at
-  // runtime, so a caller can hand us any object. None of these may ride along to
-  // a PUT /users signed with the webui key.
-  putUser.mockResolvedValueOnce({});
+  // runtime, so a caller can hand us any object. None of these may reach the
+  // database update.
   await saveProfile({
     display_name: "Anna B",
     password: "hunter2",
-    public_key: "ATTACKER",
-    recovery_authentication_enabled: true,
-    external_authentication_uid: "admin",
+    authSource: "local",
   } as ProfileDetails);
-
-  expect(putUser).toHaveBeenCalledWith("anna", {
-    username: "anna",
-    email: "old@x",
-    public_key: "K", // the record's own value, not the caller's
-    display_name: "Anna B",
-  });
+  expect(updateDisplayName).toHaveBeenCalledWith("acct-1", "Anna B");
+  expect(updateDisplayName).toHaveBeenCalledTimes(1);
 });
 
-test("saveProfile ignores non-string values for its own fields", async () => {
-  putUser.mockResolvedValueOnce({});
-  await saveProfile({ email: { toString: 1 } } as unknown as ProfileDetails);
-  expect(putUser).toHaveBeenCalledWith("anna", {
-    username: "anna",
-    email: "old@x",
-    public_key: "K",
+test("saveProfile rejects a non-string display name", async () => {
+  await expect(
+    saveProfile({ display_name: { toString: 1 } } as unknown as ProfileDetails),
+  ).resolves.toEqual({ error: "invalid request" });
+  expect(updateDisplayName).not.toHaveBeenCalled();
+});
+
+test("changePassword changes the account's own password", async () => {
+  await expect(changePassword("s3cret-password")).resolves.toEqual({ ok: true });
+  expect(changeOwnPassword).toHaveBeenCalledWith("acct-1", "s3cret-password");
+});
+
+test("changePassword rejects a short password without calling the database", async () => {
+  await expect(changePassword("short")).resolves.toEqual({
+    error: "password must be at least 12 characters",
   });
+  expect(changeOwnPassword).not.toHaveBeenCalled();
 });
 
 test("changePassword rejects a non-string password", async () => {
-  // `(123456).length < 6` is false, so a bare length check would let this reach
-  // the server as a numeric password.
+  // `(123456).length < 12` is false, so a bare length check would let this
+  // reach the database as a numeric password.
   await expect(changePassword(123456 as unknown as string)).resolves.toEqual({
-    error: "password must be at least 6 characters",
+    error: "password must be at least 12 characters",
   });
-  expect(putUser).not.toHaveBeenCalled();
+  expect(changeOwnPassword).not.toHaveBeenCalled();
+});
+
+test("changePassword surfaces the LDAP guard from the database layer", async () => {
+  changeOwnPassword.mockRejectedValueOnce(new LdapAccountPasswordError());
+  await expect(changePassword("s3cret-password")).resolves.toEqual({
+    error: "password is managed by your organization's directory",
+  });
 });

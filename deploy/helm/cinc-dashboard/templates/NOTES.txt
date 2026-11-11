@@ -1,0 +1,53 @@
+cinc-dashboard {{ .Chart.AppVersion }} is deploying.
+
+Server: {{ .Values.cincServerUrl }}
+
+{{- if .Values.ingress.enabled }}
+URL: http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}
+{{- else }}
+The Service is {{ .Values.service.type }} on port {{ .Values.service.port }}.
+Port-forward to try it:
+
+  kubectl port-forward svc/{{ include "cinc-dashboard.fullname" . }} 8080:{{ .Values.service.port }}
+  open http://localhost:8080
+{{- end }}
+
+There is no standing bootstrap admin: a brand-new install has no accounts, so
+first boot prints a one-time setup token to the pod's logs instead of a
+default login. Find it with:
+
+  kubectl logs deploy/{{ include "cinc-dashboard.fullname" . }} | grep -A2 "no accounts exist yet"
+
+Visit /setup with that token to create the first account, granted Platform
+Admin -- the token stops working the moment the pod restarts if it isn't
+used first. From there, add more servers, collectors, accounts, and role
+grants from the admin UI (/admin).
+
+{{- if and (not .Values.existingSecret) (not .Values.webuiKey) }}
+
+WARNING: no webuiKey was provided. Set webuiKey (the contents of
+webui_priv.pem) or point existingSecret at a Secret that contains it.
+{{- end }}
+
+{{- if and (not .Values.existingSecret) (not .Values.dashboardDatabaseUrl) }}
+
+WARNING: no dashboardDatabaseUrl was provided. Set dashboardDatabaseUrl
+(a Postgres connection string) or point existingSecret at a Secret that
+contains it, then apply the schema once with
+CINC_DASHBOARD_DATABASE_URL=... node scripts/migrate.mjs.
+{{- end }}
+
+{{- if eq .Values.authMode "ldap" }}
+
+LDAP bind authentication is enabled (authMode=ldap): a *dashboard* account's
+password is verified against {{ .Values.ldap.url }} instead of a local
+scrypt hash. The submitted username must already exist as a dashboard
+account with that directory DN linked -- LDAP only replaces the password
+check, it never creates an account.
+{{- if and .Values.ldap.bindDn (not .Values.existingSecret) (not .Values.ldap.bindPassword) }}
+
+WARNING: ldap.bindDn is set but ldap.bindPassword is empty. Set
+ldap.bindPassword, or point existingSecret at a Secret that contains
+LDAP_BIND_PASSWORD, or clear ldap.bindDn too for an anonymous search bind.
+{{- end }}
+{{- end }}

@@ -1,4 +1,4 @@
 # Local configuration and secrets for the Compose example
-cinc-console.env
+cinc-dashboard.env
 secrets/
 certs/

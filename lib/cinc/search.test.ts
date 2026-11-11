@@ -6,18 +6,19 @@ vi.mock("./client", () => ({ cincRequest: (...a: unknown[]) => req(...a) }));
 
 import { parseFleetRow, searchTotal } from "./search";
 import { cincPath } from "./path";
+import type { AuthorizedActionContext } from "../admin/access";
+
+const ctx = { org: "acme" } as AuthorizedActionContext;
 
 beforeEach(() => req.mockReset());
 
 test("searchTotal asks for zero rows and returns the total", async () => {
   req.mockResolvedValueOnce({ total: 42, start: 0, rows: [] });
 
-  const total = await searchTotal("alice", "acme", "node", "ohai_time:[* TO *]");
+  const total = await searchTotal(ctx, "node", "ohai_time:[* TO *]");
 
   expect(total).toBe(42);
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "POST",
     path: cincPath`/search/node`,
     query: { q: "ohai_time:[* TO *]", rows: 0, start: 0 },
@@ -27,7 +28,7 @@ test("searchTotal asks for zero rows and returns the total", async () => {
 
 test("searchTotal treats a missing total as zero", async () => {
   req.mockResolvedValueOnce({ rows: [] });
-  expect(await searchTotal("alice", "acme", "node", "*:*")).toBe(0);
+  expect(await searchTotal(ctx, "node", "*:*")).toBe(0);
 });
 
 test("parseFleetRow reads environment and platform, tolerating gaps", () => {

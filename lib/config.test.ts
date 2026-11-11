@@ -18,6 +18,8 @@ const base = {
   CINC_SERVER_URL: "https://s",
   CINC_WEBUI_KEY: "PEM",
   SESSION_SECRET: "x".repeat(32),
+  CINC_DASHBOARD_DATABASE_URL: "postgres://user:pass@localhost:5432/cinc_dashboard",
+  CINC_DASHBOARD_ENCRYPTION_KEY: "e".repeat(32),
 };
 
 test("error names every missing required value", () => {
@@ -30,6 +32,8 @@ test("error names every missing required value", () => {
   expect(msg).toContain("CINC_SERVER_URL");
   expect(msg).toContain("CINC_WEBUI_KEY");
   expect(msg).toContain("SESSION_SECRET");
+  expect(msg).toContain("CINC_DASHBOARD_DATABASE_URL");
+  expect(msg).toContain("CINC_DASHBOARD_ENCRYPTION_KEY");
 });
 
 test("parses a valid env with defaults", () => {
@@ -103,11 +107,58 @@ test("rejects a too-short secret from SESSION_SECRET_FILE", () => {
   ).toThrow(/SESSION_SECRET: must be >= 32 chars/);
 });
 
+test("requires CINC_DASHBOARD_DATABASE_URL", () => {
+  expect(() =>
+    loadConfig({ ...base, CINC_DASHBOARD_DATABASE_URL: undefined }),
+  ).toThrow(/CINC_DASHBOARD_DATABASE_URL/);
+});
+
+test("reads the encryption key from CINC_DASHBOARD_ENCRYPTION_KEY_FILE", () => {
+  const key = "k".repeat(40);
+  const c = loadConfig({
+    ...base,
+    CINC_DASHBOARD_ENCRYPTION_KEY: undefined,
+    CINC_DASHBOARD_ENCRYPTION_KEY_FILE: secretFile(key),
+  });
+  expect(c.dashboardEncryptionKey).toBe(key);
+});
+
+test("strips exactly one trailing newline from CINC_DASHBOARD_ENCRYPTION_KEY_FILE", () => {
+  const key = "k".repeat(32);
+  const c = loadConfig({
+    ...base,
+    CINC_DASHBOARD_ENCRYPTION_KEY: undefined,
+    CINC_DASHBOARD_ENCRYPTION_KEY_FILE: secretFile(`${key}\n`),
+  });
+  expect(c.dashboardEncryptionKey).toBe(key);
+});
+
+test("inline CINC_DASHBOARD_ENCRYPTION_KEY wins over the _FILE variant", () => {
+  const c = loadConfig({
+    ...base,
+    CINC_DASHBOARD_ENCRYPTION_KEY: "i".repeat(32),
+    CINC_DASHBOARD_ENCRYPTION_KEY_FILE: secretFile("f".repeat(32)),
+  });
+  expect(c.dashboardEncryptionKey).toBe("i".repeat(32));
+});
+
+test("rejects a too-short CINC_DASHBOARD_ENCRYPTION_KEY", () => {
+  expect(() =>
+    loadConfig({ ...base, CINC_DASHBOARD_ENCRYPTION_KEY: "short" }),
+  ).toThrow(/CINC_DASHBOARD_ENCRYPTION_KEY: must be >= 32 chars/);
+});
+
+test("requires either CINC_DASHBOARD_ENCRYPTION_KEY or its _FILE variant", () => {
+  expect(() =>
+    loadConfig({ ...base, CINC_DASHBOARD_ENCRYPTION_KEY: undefined }),
+  ).toThrow(/CINC_DASHBOARD_ENCRYPTION_KEY/);
+});
+
 test("reads the webui key from CINC_WEBUI_KEY_FILE", () => {
   const c = loadConfig({
-    CINC_SERVER_URL: "https://s",
+    ...base,
+    CINC_WEBUI_KEY: undefined,
     CINC_WEBUI_KEY_FILE: KEY_FILE,
-    SESSION_SECRET: "x".repeat(32),
   });
   expect(c.webuiKey).toContain("BEGIN RSA PRIVATE KEY");
 });

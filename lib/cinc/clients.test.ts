@@ -6,18 +6,19 @@ vi.mock("./client", () => ({ cincRequest: (...a: unknown[]) => req(...a) }));
 
 import { createClient, deleteClient } from "./clients";
 import { cincPath } from "./path";
+import type { AuthorizedActionContext } from "../admin/access";
+
+const ctx = { org: "acme" } as AuthorizedActionContext;
 
 beforeEach(() => req.mockReset());
 
 test("createClient POSTs the name with create_key and returns the private key", async () => {
   req.mockResolvedValueOnce({ chef_key: { private_key: "PEM-NEW" } });
-  await expect(createClient("anna", "acme", "ci")).resolves.toEqual({
+  await expect(createClient(ctx, "ci")).resolves.toEqual({
     name: "ci",
     privateKey: "PEM-NEW",
   });
-  expect(req).toHaveBeenCalledWith({
-    user: "anna",
-    org: "acme",
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "POST",
     path: cincPath`/clients`,
     body: { name: "ci", create_key: true },
@@ -26,7 +27,7 @@ test("createClient POSTs the name with create_key and returns the private key", 
 
 test("createClient falls back to the legacy top-level private_key", async () => {
   req.mockResolvedValueOnce({ private_key: "PEM-OLD" });
-  await expect(createClient("anna", "acme", "ci")).resolves.toMatchObject({
+  await expect(createClient(ctx, "ci")).resolves.toMatchObject({
     privateKey: "PEM-OLD",
   });
 });
@@ -36,30 +37,28 @@ test("createClient prefers chef_key over the legacy field", async () => {
     chef_key: { private_key: "PEM-NEW" },
     private_key: "PEM-OLD",
   });
-  await expect(createClient("anna", "acme", "ci")).resolves.toMatchObject({
+  await expect(createClient(ctx, "ci")).resolves.toMatchObject({
     privateKey: "PEM-NEW",
   });
 });
 
 test("createClient returns an empty key when the server sends none", async () => {
   req.mockResolvedValueOnce({});
-  await expect(createClient("anna", "acme", "ci")).resolves.toMatchObject({
+  await expect(createClient(ctx, "ci")).resolves.toMatchObject({
     privateKey: "",
   });
 });
 
 test("deleteClient DELETEs /clients/<name>", async () => {
   req.mockResolvedValueOnce({});
-  await deleteClient("anna", "acme", "ci");
-  expect(req).toHaveBeenCalledWith({
-    user: "anna",
-    org: "acme",
+  await deleteClient(ctx, "ci");
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "DELETE",
     path: cincPath`/clients/ci`,
   });
 });
 
 test("deleteClient rejects a name that would retarget the signed path", async () => {
-  await expect(deleteClient("anna", "acme", "ci/_acl")).rejects.toThrow();
+  await expect(deleteClient(ctx, "ci/_acl")).rejects.toThrow();
   expect(req).not.toHaveBeenCalled();
 });

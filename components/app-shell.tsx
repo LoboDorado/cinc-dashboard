@@ -5,6 +5,7 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 import type { Org } from "@/lib/cinc/orgs";
 import { OrgSwitcher } from "@/components/org-switcher";
+import { ServerSwitcher, type ReachableServer } from "@/components/server-switcher";
 import { UserMenu } from "@/components/user-menu";
 import { CommandPalette } from "@/components/command-palette";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -13,15 +14,23 @@ import { PrimaryNavLinks } from "@/components/primary-nav";
 import { MobileNav } from "@/components/mobile-nav";
 
 export function AppShell({
+  server,
+  servers,
   org,
   orgs,
   displayName,
+  isPlatformMember = false,
+  canManageRoles = false,
   version,
   children,
 }: {
+  server: string;
+  servers: ReachableServer[];
   org: string;
   orgs: Org[];
   displayName: string;
+  isPlatformMember?: boolean;
+  canManageRoles?: boolean;
   version: string;
   children: ReactNode;
 }) {
@@ -37,9 +46,15 @@ export function AppShell({
       </a>
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-surface/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-          <MobileNav org={org} displayName={displayName} />
+          <MobileNav
+            server={server}
+            org={org}
+            displayName={displayName}
+            isPlatformMember={isPlatformMember}
+            canManageRoles={canManageRoles}
+          />
           <Link
-            href="/orgs"
+            href={`/servers/${server}/orgs`}
             className="flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight"
           >
             <Image
@@ -50,15 +65,16 @@ export function AppShell({
               priority
               unoptimized
             />
-            <span className="hidden text-text min-[400px]:inline">console</span>
+            <span className="hidden text-text min-[400px]:inline">dashboard</span>
           </Link>
+          <ServerSwitcher servers={servers} />
           <OrgSwitcher orgs={orgs} />
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <CommandPalette org={org} orgs={orgs} />
+          <CommandPalette server={server} org={org} orgs={orgs} />
           {/* Below md the user menu lives in the MobileNav drawer. */}
           <div className="hidden md:block">
-            <UserMenu name={displayName} />
+            <UserMenu name={displayName} isPlatformMember={isPlatformMember} />
           </div>
         </div>
       </header>
@@ -70,7 +86,7 @@ export function AppShell({
           aria-label="Primary"
           className="hidden w-48 shrink-0 border-r border-border bg-surface p-3 md:block"
         >
-          <PrimaryNavLinks org={org} />
+          <PrimaryNavLinks server={server} org={org} canManageRoles={canManageRoles} />
         </nav>
 
         <main id="main-content" tabIndex={-1} className="flex-1 p-4 md:p-6">

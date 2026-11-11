@@ -1,0 +1,45 @@
+import { currentAccountId } from "@/lib/guard";
+import { requireObjectAccess } from "@/lib/admin/access";
+import { makeResource } from "@/lib/cinc/resource";
+import { safeGet, explainRead } from "@/lib/cinc/safe-get";
+import { ObjectEditor } from "@/components/object-editor";
+import { RoleDetails } from "@/components/details/role-details";
+import { saveRole, deleteRole, createRole } from "../actions";
+
+const roles = makeResource("roles");
+
+export default async function RoleDetail({
+  params,
+}: {
+  params: Promise<{ server: string; org: string; name: string }>;
+}) {
+  const { server, org, name: raw } = await params;
+  const name = decodeURIComponent(raw);
+  const accountId = await currentAccountId();
+  const base = `/servers/${server}/orgs/${org}/roles`;
+  const res = await safeGet(async () => {
+    const ctx = await requireObjectAccess(accountId, server, org, "roles", "read");
+    return roles.get(ctx, name);
+  });
+  if ("error" in res) {
+    return <p className="text-sm text-danger">{explainRead(res.error)}</p>;
+  }
+  return (
+    <ObjectEditor
+      name={name}
+      initialJson={JSON.stringify(res.data, null, 2)}
+      details={
+        <RoleDetails
+          data={res.data}
+          onSaveRunList={saveRole.bind(null, server, org, name)}
+          onSaveOverview={saveRole.bind(null, server, org, name)}
+        />
+      }
+      backHref={base}
+      onSave={saveRole.bind(null, server, org, name)}
+      onDelete={deleteRole.bind(null, server, org, name)}
+      onDuplicate={createRole.bind(null, server, org)}
+      nameKind="role"
+    />
+  );
+}

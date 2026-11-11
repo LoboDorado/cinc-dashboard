@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
 
 const LICENSE_URL =
-  "https://github.com/cinc-project/cinc-console/blob/main/LICENSE";
-const RELEASES_URL = "https://github.com/cinc-project/cinc-console/releases";
+  "https://github.com/cinc-project/cinc-dashboard/blob/main/LICENSE";
+const RELEASES_URL = "https://github.com/cinc-project/cinc-dashboard/releases";
 
 const LINK = "text-link underline underline-offset-2 hover:text-text";
 
@@ -29,7 +29,7 @@ export function SiteFooter({ version }: { version?: string }) {
               href={`${RELEASES_URL}/tag/v${version}`}
               className={cn(LINK, "font-mono")}
             >
-              cinc-console v{version}
+              cinc-dashboard v{version}
             </a>
             <span aria-hidden="true">·</span>
           </>

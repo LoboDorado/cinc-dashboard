@@ -1,4 +1,4 @@
-# Building Cinc Console Images
+# Building Cinc Dashboard Images
 
 Manual Docker build instructions for local or alternate environments. This
 repository also includes workflows for automated build and release.
@@ -8,7 +8,7 @@ repository also includes workflows for automated build and release.
 Default build path for open-source dependencies:
 
 ```bash
-docker build -t cinc-console:local .
+docker build -t cinc-dashboard:local .
 ```
 
 ## Private npm Registry (Token Auth)
@@ -42,7 +42,7 @@ registry=https://registry.example.com/artifactory/api/npm/npm-virtual/
 1. Build the image.
 
 ```bash
-docker build -t cinc-console:local .
+docker build -t cinc-dashboard:local .
 ```
 
 Optional: inject the token from an environment variable before build.
@@ -73,7 +73,7 @@ For that case, use Docker Buildx:
 ```bash
 docker buildx build \
   --platform linux/amd64 \
-  -t cinc-console:local \
+  -t cinc-dashboard:local \
   .
 ```
 
@@ -83,7 +83,7 @@ To push directly during build. Set `VERSION` to the release you are building
 ```bash
 docker buildx build \
   --platform linux/amd64 \
-  -t registry.example.com/cinc/cinc-console:$VERSION \
+  -t registry.example.com/cinc/cinc-dashboard:$VERSION \
   --push \
   .
 ```
@@ -98,7 +98,7 @@ Use Docker Buildx with a comma-separated platform list:
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t registry.example.com/cinc/cinc-console:$VERSION \
+  -t registry.example.com/cinc/cinc-dashboard:$VERSION \
   --push \
   .
 ```

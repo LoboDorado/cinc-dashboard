@@ -23,16 +23,16 @@ describe("SiteFooter", () => {
 
   it("omits the version when none is passed (the signed-out login page)", () => {
     render(<SiteFooter />);
-    expect(screen.queryByText(/cinc-console v/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cinc-dashboard v/)).not.toBeInTheDocument();
   });
 
   it("links the version to its release when signed in", () => {
     render(<SiteFooter version="0.7.1" />);
     expect(
-      screen.getByRole("link", { name: "cinc-console v0.7.1" }),
+      screen.getByRole("link", { name: "cinc-dashboard v0.7.1" }),
     ).toHaveAttribute(
       "href",
-      "https://github.com/cinc-project/cinc-console/releases/tag/v0.7.1",
+      "https://github.com/cinc-project/cinc-dashboard/releases/tag/v0.7.1",
     );
   });
 });

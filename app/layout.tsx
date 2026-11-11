@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "cinc console",
-  description: "Web console for a Cinc Infra Server",
+  title: "cinc dashboard",
+  description: "Web dashboard for a Cinc Infra Server",
 };
 
 /**
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
  * has no request to take it from — its scripts would ship without a nonce and the
  * browser would refuse to run them. Every real page here is already dynamic (they
  * all read the session cookie); this pins the two that weren't, /login and the 404,
- * and costs nothing — there is nothing user-independent to cache in a console.
+ * and costs nothing — there is nothing user-independent to cache in a dashboard.
  */
 export const dynamic = "force-dynamic";
 

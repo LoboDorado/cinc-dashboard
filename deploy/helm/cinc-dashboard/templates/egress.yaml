@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-egress
+  labels:
+    app.kubernetes.io/name: cinc-dashboard
+spec:
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+  - ports:
+    - port: 80
+      protocol: TCP
+    - port: 3000
+      protocol: TCP
+  egress:
+  - ports:
+    - port: 443
+      protocol: TCP
+    - port: 80
+      protocol: TCP
+    - port: 3000
+      protocol: TCP
+    {{- if eq .Values.authMode "ldap" }}
+    # LDAP bind auth (lib/ldap/client.ts) needs egress to the directory.
+    # Covers both plaintext (389) and LDAPS (636); if your directory listens
+    # on a non-standard port, add it via values.ldap.extraNetworkPolicyPorts.
+    - port: 389
+      protocol: TCP
+    - port: 636
+      protocol: TCP
+    {{- range .Values.ldap.extraNetworkPolicyPorts }}
+    - port: {{ . }}
+      protocol: TCP
+    {{- end }}
+    {{- end }}
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cinc-dashboard

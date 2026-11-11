@@ -3,7 +3,7 @@ import { useId, type ReactNode } from "react";
 /**
  * The "nothing here yet" block for an object list: an illustration, a headline
  * saying what the object is, one sentence on why you'd want one, and the next
- * step — a button when the console can do it, a CommandSnippet when it can't.
+ * step — a button when the dashboard can do it, a CommandSnippet when it can't.
  * Distinct from "no rows match your filter", which stays a one-line note.
  */
 export function EmptyState({

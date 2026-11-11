@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { cincRequest } from "./client";
 import { cincPath } from "./path";
 import { compareVersions } from "./fleet";
@@ -62,13 +63,8 @@ export function parseCookbookVersions(data: unknown): string[] {
  * default response carries only each cookbook's latest version. The query lives
  * in `query`, never in `path`, so it stays out of the signed canonical path.
  */
-export async function listCookbooks(
-  user: string,
-  org: string,
-): Promise<CookbookSummary[]> {
-  const data = await cincRequest<Record<string, unknown>>({
-    user,
-    org,
+export async function listCookbooks(ctx: AuthorizedActionContext): Promise<CookbookSummary[]> {
+  const data = await cincRequest<Record<string, unknown>>(ctx, {
     method: "GET",
     path: cincPath`/cookbooks`,
     query: { num_versions: "all" },
@@ -78,13 +74,10 @@ export async function listCookbooks(
 
 /** Version strings for a cookbook (`GET /cookbooks/NAME`). */
 export async function listCookbookVersions(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   name: string,
 ): Promise<string[]> {
-  const data = await cincRequest<Record<string, unknown>>({
-    user,
-    org,
+  const data = await cincRequest<Record<string, unknown>>(ctx, {
     method: "GET",
     path: cincPath`/cookbooks/${name}`,
   });
@@ -93,14 +86,11 @@ export async function listCookbookVersions(
 
 /** Delete a single cookbook version (`DELETE /cookbooks/NAME/VERSION`). */
 export async function deleteCookbookVersion(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   name: string,
   version: string,
 ): Promise<void> {
-  await cincRequest({
-    user,
-    org,
+  await cincRequest(ctx, {
     method: "DELETE",
     path: cincPath`/cookbooks/${name}/${version}`,
   });
@@ -111,13 +101,9 @@ export async function deleteCookbookVersion(
  * version. Sequential so a mid-way ACL/transport failure surfaces clearly
  * rather than firing a burst of partially-applied deletes.
  */
-export async function deleteCookbook(
-  user: string,
-  org: string,
-  name: string,
-): Promise<void> {
-  const versions = await listCookbookVersions(user, org, name);
+export async function deleteCookbook(ctx: AuthorizedActionContext, name: string): Promise<void> {
+  const versions = await listCookbookVersions(ctx, name);
   for (const version of versions) {
-    await deleteCookbookVersion(user, org, name, version);
+    await deleteCookbookVersion(ctx, name, version);
   }
 }

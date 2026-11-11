@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { cincRequest } from "./client";
 import { cincPath } from "./path";
 
@@ -9,33 +10,32 @@ import { cincPath } from "./path";
  *   POST   /<kind>            → create
  *   PUT    /<kind>/<name>     → replace
  *   DELETE /<kind>/<name>     → delete
+ *
+ * Every method takes an `AuthorizedActionContext` already scoped (by the
+ * caller, via `requireObjectAccess`) to this `kind` and the right
+ * read/write action — this module just builds the request, it doesn't decide
+ * whether to make it.
  */
 export function makeResource<T = Record<string, unknown>>(kind: string) {
   return {
     kind,
-    list: (user: string, org: string) =>
-      cincRequest<Record<string, string>>({
-        user,
-        org,
+    list: (ctx: AuthorizedActionContext) =>
+      cincRequest<Record<string, string>>(ctx, {
         method: "GET",
         path: cincPath`/${kind}`,
       }),
-    get: (user: string, org: string, name: string) =>
-      cincRequest<T>({ user, org, method: "GET", path: cincPath`/${kind}/${name}` }),
-    create: (user: string, org: string, body: T) =>
-      cincRequest<unknown>({ user, org, method: "POST", path: cincPath`/${kind}`, body }),
-    update: (user: string, org: string, name: string, body: T) =>
-      cincRequest<unknown>({
-        user,
-        org,
+    get: (ctx: AuthorizedActionContext, name: string) =>
+      cincRequest<T>(ctx, { method: "GET", path: cincPath`/${kind}/${name}` }),
+    create: (ctx: AuthorizedActionContext, body: T) =>
+      cincRequest<unknown>(ctx, { method: "POST", path: cincPath`/${kind}`, body }),
+    update: (ctx: AuthorizedActionContext, name: string, body: T) =>
+      cincRequest<unknown>(ctx, {
         method: "PUT",
         path: cincPath`/${kind}/${name}`,
         body,
       }),
-    remove: (user: string, org: string, name: string) =>
-      cincRequest<unknown>({
-        user,
-        org,
+    remove: (ctx: AuthorizedActionContext, name: string) =>
+      cincRequest<unknown>(ctx, {
         method: "DELETE",
         path: cincPath`/${kind}/${name}`,
       }),

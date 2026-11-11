@@ -1,4 +1,4 @@
-# Releasing cinc-console
+# Releasing cinc-dashboard
 
 Cutting a release is two steps: open a release PR, then merge it. Everything
 else — tagging, release notes, the signed multi-arch image — follows from the
@@ -35,8 +35,8 @@ make release-pr VERSION=0.5.0        # or: gh workflow run release-pr.yml -f ver
 That opens a **Release 0.5.0** PR on branch `release/0.5.0` containing:
 
 - `package.json` → `version: 0.5.0`
-- `deploy/helm/cinc-console/Chart.yaml` → `version` and `appVersion` → `0.5.0`
-- `deploy/compose/compose.yaml` → default image `ghcr.io/cinc-project/cinc-console:0.5.0`
+- `deploy/helm/cinc-dashboard/Chart.yaml` → `version` and `appVersion` → `0.5.0`
+- `deploy/compose/compose.yaml` → default image `ghcr.io/cinc-project/cinc-dashboard:0.5.0`
 - `CHANGELOG.md` → a `## 0.5.0 - <date>` section
 
 Review it like any other PR. CI runs against it, so you get the full `make check`
@@ -44,7 +44,7 @@ signal on the exact tree that will be released. Reword the generated notes on th
 branch if you want — they become the GitHub Release body verbatim.
 
 **Merging the PR** tags `v0.5.0` at the merge commit, publishes the GitHub
-Release, and builds `ghcr.io/<owner>/cinc-console` tagged `0.5.0`, `0.5`, and
+Release, and builds `ghcr.io/<owner>/cinc-dashboard` tagged `0.5.0`, `0.5`, and
 `latest`.
 
 To change the version after opening the PR, re-run the workflow with the new
@@ -71,7 +71,7 @@ Run the same check locally: `make version-check VERSION=0.5.0`.
 place means adding a target there — and a test in `scripts/set-version.test.ts` —
 so `--check` covers it everywhere at once.
 
-`deploy/helm/cinc-console/values.yaml` deliberately has `image.tag: ""`, which
+`deploy/helm/cinc-dashboard/values.yaml` deliberately has `image.tag: ""`, which
 defers to `.Chart.AppVersion`. Leave it that way: it means one Helm version to
 bump, not two that can drift.
 

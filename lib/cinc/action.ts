@@ -1,5 +1,7 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
+import { AccessDeniedError } from "../admin/access";
+import { DelegationDeniedError } from "../admin/grants";
 import { isCincError } from "./errors";
 import { isUnsafePathError } from "./path";
 
@@ -23,6 +25,12 @@ export async function runAction(
     if (opts.revalidate) revalidatePath(opts.revalidate, "layout");
     return { ok: true };
   } catch (e) {
+    // A role-grant denial (lib/admin/access.ts) or a delegation-cap denial
+    // (lib/admin/grants.ts) both read to the user exactly like the server's
+    // own 403 — all three just mean "no permission."
+    if (e instanceof AccessDeniedError || e instanceof DelegationDeniedError) {
+      return { error: "forbidden" };
+    }
     if (isCincError(e)) {
       if (e.forbidden) return { error: "forbidden" };
       if (e.notFound) return { error: "not found" };

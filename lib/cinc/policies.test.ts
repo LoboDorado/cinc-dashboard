@@ -12,6 +12,9 @@ import {
   parsePolicyRevisions,
 } from "./policies";
 import { cincPath } from "./path";
+import type { AuthorizedActionContext } from "../admin/access";
+
+const ctx = { org: "acme" } as AuthorizedActionContext;
 
 beforeEach(() => req.mockReset());
 
@@ -33,13 +36,8 @@ describe("parsePolicyRevisions", () => {
 describe("listPolicyRevisions", () => {
   it("GETs /policies/<name> and parses the revisions", async () => {
     req.mockResolvedValueOnce({ revisions: { r1: {}, r2: {} } });
-    await expect(listPolicyRevisions("anna", "acme", "web")).resolves.toEqual([
-      "r1",
-      "r2",
-    ]);
-    expect(req).toHaveBeenCalledWith({
-      user: "anna",
-      org: "acme",
+    await expect(listPolicyRevisions(ctx, "web")).resolves.toEqual(["r1", "r2"]);
+    expect(req).toHaveBeenCalledWith(ctx, {
       method: "GET",
       path: cincPath`/policies/web`,
     });
@@ -49,19 +47,15 @@ describe("listPolicyRevisions", () => {
 describe("deletePolicyRevision", () => {
   it("DELETEs /policies/<name>/revisions/<rev>", async () => {
     req.mockResolvedValueOnce({});
-    await deletePolicyRevision("anna", "acme", "web", "r1");
-    expect(req).toHaveBeenCalledWith({
-      user: "anna",
-      org: "acme",
+    await deletePolicyRevision(ctx, "web", "r1");
+    expect(req).toHaveBeenCalledWith(ctx, {
       method: "DELETE",
       path: cincPath`/policies/web/revisions/r1`,
     });
   });
 
   it("rejects a revision that would retarget the signed path", async () => {
-    await expect(
-      deletePolicyRevision("anna", "acme", "web", "../../nodes/x"),
-    ).rejects.toThrow();
+    await expect(deletePolicyRevision(ctx, "web", "../../nodes/x")).rejects.toThrow();
     expect(req).not.toHaveBeenCalled();
   });
 });
@@ -70,10 +64,10 @@ describe("deletePolicy", () => {
   it("deletes every revision in order", async () => {
     req.mockResolvedValueOnce({ revisions: { r1: {}, r2: {}, r3: {} } });
     req.mockResolvedValue({});
-    await deletePolicy("anna", "acme", "web");
+    await deletePolicy(ctx, "web");
     const deleted = req.mock.calls
       .slice(1)
-      .map(([opts]) => [opts.method, String(opts.path)]);
+      .map(([, opts]) => [opts.method, String(opts.path)]);
     expect(deleted).toEqual([
       ["DELETE", String(cincPath`/policies/web/revisions/r1`)],
       ["DELETE", String(cincPath`/policies/web/revisions/r2`)],
@@ -85,7 +79,7 @@ describe("deletePolicy", () => {
     req.mockResolvedValueOnce({ revisions: { r1: {}, r2: {}, r3: {} } });
     req.mockResolvedValueOnce({});
     req.mockRejectedValueOnce(new CincError(403, {}));
-    await expect(deletePolicy("anna", "acme", "web")).rejects.toMatchObject({
+    await expect(deletePolicy(ctx, "web")).rejects.toMatchObject({
       status: 403,
     });
     // list + r1 + r2 (failed); r3 is never attempted.
@@ -94,7 +88,7 @@ describe("deletePolicy", () => {
 
   it("makes no DELETE when the policy has no revisions", async () => {
     req.mockResolvedValueOnce({ revisions: {} });
-    await deletePolicy("anna", "acme", "web");
+    await deletePolicy(ctx, "web");
     expect(req).toHaveBeenCalledTimes(1);
   });
 });

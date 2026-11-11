@@ -6,15 +6,16 @@ vi.mock("./client", () => ({ cincRequest: (...a: unknown[]) => req(...a) }));
 
 import { cookbooks, clients } from "./readonly";
 import { cincPath } from "./path";
+import type { AuthorizedActionContext } from "../admin/access";
+
+const ctx = { org: "acme" } as AuthorizedActionContext;
 
 beforeEach(() => req.mockReset());
 
-test("cookbooks.list hits GET /cookbooks within the org", async () => {
+test("cookbooks.list hits GET /cookbooks", async () => {
   req.mockResolvedValueOnce({ nginx: {} });
-  await cookbooks.list("alice", "acme");
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await cookbooks.list(ctx);
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "GET",
     path: cincPath`/cookbooks`,
   });
@@ -22,10 +23,8 @@ test("cookbooks.list hits GET /cookbooks within the org", async () => {
 
 test("clients.get hits GET /clients/<name>", async () => {
   req.mockResolvedValueOnce({});
-  await clients.get("alice", "acme", "web01");
-  expect(req).toHaveBeenCalledWith({
-    user: "alice",
-    org: "acme",
+  await clients.get(ctx, "web01");
+  expect(req).toHaveBeenCalledWith(ctx, {
     method: "GET",
     path: cincPath`/clients/web01`,
   });

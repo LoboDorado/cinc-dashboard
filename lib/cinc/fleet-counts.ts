@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuthorizedActionContext } from "../admin/access";
 import { searchTotal } from "./search";
 import { MISSING_AFTER_MS, RECENT_WITHIN_MS } from "./fleet";
 
@@ -40,28 +41,26 @@ const UNAVAILABLE: FleetCounts = { recent: null, missing: null, unconfigured: nu
  * promise.
  */
 export async function fetchFleetCounts(
-  user: string,
-  org: string,
+  ctx: AuthorizedActionContext,
   nowMs: number,
 ): Promise<FleetCounts> {
   const cutoff = Math.floor((nowMs - MISSING_AFTER_MS) / 1000);
   try {
     const hourAgo = Math.floor((nowMs - RECENT_WITHIN_MS) / 1000);
     const [total, present, configured, recent] = await Promise.all([
-      searchTotal(user, org, "node", "*:*"),
+      searchTotal(ctx, "node", "*:*"),
       // Strict lower bound ({) so "exactly at the cutoff" counts as missing,
       // matching isMissing's `> threshold`. Keep both brackets matched ({…})
       // — real Cinc/Solr tolerates a mixed `{… ]`, but a leaner server (e.g.
       // cinc-server-ng) rejects it as an "unterminated range".
-      searchTotal(user, org, "node", `ohai_time:{${cutoff} TO *}`),
+      searchTotal(ctx, "node", `ohai_time:{${cutoff} TO *}`),
       searchTotal(
-        user,
-        org,
+        ctx,
         "node",
         `policy_name:[* TO *] OR (run_list:[* TO *] AND NOT chef_environment:_default)`,
       ),
       // Inclusive ([…]) to match isRecent's `<=`.
-      searchTotal(user, org, "node", `ohai_time:[${hourAgo} TO *]`),
+      searchTotal(ctx, "node", `ohai_time:[${hourAgo} TO *]`),
     ]);
     return {
       recent,

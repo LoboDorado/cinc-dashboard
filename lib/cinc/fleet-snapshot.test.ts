@@ -13,7 +13,9 @@ vi.mock("./client-lifecycle", () => ({
 import { CincError } from "./errors";
 import { loadFleetSnapshot } from "./fleet-snapshot";
 import type { FleetNode } from "./fleet";
+import type { AuthorizedActionContext } from "../admin/access";
 
+const ctx = { org: "acme" } as AuthorizedActionContext;
 const NOW = Date.UTC(2026, 10, 2, 12);
 const node = (name: string, ohaiTime: number | null): FleetNode => ({
   name,
@@ -39,9 +41,9 @@ test("folds the fleet and lifecycle into a snapshot for the caller's user/org", 
     node("db01", null),
   ]);
 
-  const res = await loadFleetSnapshot("anna", "acme", NOW);
+  const res = await loadFleetSnapshot(ctx, NOW);
 
-  expect(mocks.fetchFleetNodes).toHaveBeenCalledWith("anna", "acme");
+  expect(mocks.fetchFleetNodes).toHaveBeenCalledWith(ctx);
   expect(mocks.getClientLifecycle).toHaveBeenCalledWith(NOW);
   if (!("data" in res)) throw new Error(`expected data, got ${res.error}`);
   expect(res.data.generatedAt).toBe(NOW);
@@ -57,19 +59,19 @@ test("folds the fleet and lifecycle into a snapshot for the caller's user/org", 
 
 test("a 403 on the fleet search becomes { error: 'forbidden' }", async () => {
   mocks.fetchFleetNodes.mockRejectedValue(new CincError(403, {}));
-  await expect(loadFleetSnapshot("anna", "acme", NOW)).resolves.toEqual({
+  await expect(loadFleetSnapshot(ctx, NOW)).resolves.toEqual({
     error: "forbidden",
   });
 });
 
 test("a server error on the fleet search is reported, not thrown", async () => {
   mocks.fetchFleetNodes.mockRejectedValue(new CincError(502, {}));
-  await expect(loadFleetSnapshot("anna", "acme", NOW)).resolves.toEqual({
+  await expect(loadFleetSnapshot(ctx, NOW)).resolves.toEqual({
     error: "server error (502)",
   });
 });
 
 test("an unexpected error propagates", async () => {
   mocks.fetchFleetNodes.mockRejectedValue(new TypeError("bug"));
-  await expect(loadFleetSnapshot("anna", "acme", NOW)).rejects.toThrow("bug");
+  await expect(loadFleetSnapshot(ctx, NOW)).rejects.toThrow("bug");
 });

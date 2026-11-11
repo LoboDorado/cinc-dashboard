@@ -6,7 +6,9 @@ vi.mock("./search", () => ({ searchTotal: (...a: unknown[]) => searchTotal(...a)
 
 import { fetchFleetCounts } from "./fleet-counts";
 import { MISSING_AFTER_MS, RECENT_WITHIN_MS } from "./fleet";
+import type { AuthorizedActionContext } from "../admin/access";
 
+const ctx = { org: "acme" } as AuthorizedActionContext;
 const NOW = 1_700_000_000_000; // fixed "now" in ms
 
 beforeEach(() => searchTotal.mockReset());
@@ -19,33 +21,22 @@ test("derives recent, missing and unconfigured from cheap totals", async () => {
     .mockResolvedValueOnce(8) // configured
     .mockResolvedValueOnce(5); // checked in within the hour
 
-  expect(await fetchFleetCounts("alice", "acme", NOW)).toEqual({
+  expect(await fetchFleetCounts(ctx, NOW)).toEqual({
     recent: 5,
     missing: 3,
     unconfigured: 2,
   });
 
   const cutoff = Math.floor((NOW - MISSING_AFTER_MS) / 1000);
-  expect(searchTotal).toHaveBeenCalledWith("alice", "acme", "node", "*:*");
+  expect(searchTotal).toHaveBeenCalledWith(ctx, "node", "*:*");
+  expect(searchTotal).toHaveBeenCalledWith(ctx, "node", `ohai_time:{${cutoff} TO *}`);
   expect(searchTotal).toHaveBeenCalledWith(
-    "alice",
-    "acme",
-    "node",
-    `ohai_time:{${cutoff} TO *}`,
-  );
-  expect(searchTotal).toHaveBeenCalledWith(
-    "alice",
-    "acme",
+    ctx,
     "node",
     `policy_name:[* TO *] OR (run_list:[* TO *] AND NOT chef_environment:_default)`,
   );
   const hourAgo = Math.floor((NOW - RECENT_WITHIN_MS) / 1000);
-  expect(searchTotal).toHaveBeenCalledWith(
-    "alice",
-    "acme",
-    "node",
-    `ohai_time:[${hourAgo} TO *]`,
-  );
+  expect(searchTotal).toHaveBeenCalledWith(ctx, "node", `ohai_time:[${hourAgo} TO *]`);
 });
 
 test("never reports negative counts", async () => {
@@ -57,7 +48,7 @@ test("never reports negative counts", async () => {
     .mockResolvedValueOnce(9)
     .mockResolvedValueOnce(2);
 
-  expect(await fetchFleetCounts("alice", "acme", NOW)).toEqual({
+  expect(await fetchFleetCounts(ctx, NOW)).toEqual({
     recent: 2,
     missing: 0,
     unconfigured: 0,
@@ -69,7 +60,7 @@ test("degrades to null counts when a search fails", async () => {
   // resolve so we don't leave stray rejected promises around.
   searchTotal.mockRejectedValueOnce(new Error("boom")).mockResolvedValue(0);
 
-  expect(await fetchFleetCounts("alice", "acme", NOW)).toEqual({
+  expect(await fetchFleetCounts(ctx, NOW)).toEqual({
     recent: null,
     missing: null,
     unconfigured: null,

@@ -118,10 +118,12 @@ function sortNodes(nodes: NodeSummary[], sort: SortState): NodeSummary[] {
 }
 
 export function FleetDashboard({
+  server,
   org,
   initial,
   initialError,
 }: {
+  server: string;
   org: string;
   initial: FleetSnapshot | null;
   initialError: string | null;
@@ -153,7 +155,7 @@ export function FleetDashboard({
       inFlight.current = true;
       setRefreshing(true);
       try {
-        const res = await fetch(`/orgs/${org}/fleet`, { cache: "no-store" });
+        const res = await fetch(`/servers/${server}/orgs/${org}/fleet`, { cache: "no-store" });
         if (!active) return;
         if (res.status === 401) {
           router.push("/login");
@@ -192,7 +194,7 @@ export function FleetDashboard({
       active = false;
       clearInterval(id);
     };
-  }, [org, initial, router]);
+  }, [server, org, initial, router]);
 
   // Promote the freshest stats into the tiles once a minute, decoupled from the
   // 10s list poll so the boom numbers don't flicker every few seconds.
@@ -329,7 +331,7 @@ export function FleetDashboard({
                 render; CSS shows one, so there's no layout flash on hydration. */}
             <ul aria-label="Fleet nodes" className="divide-y divide-border sm:hidden">
               {capped.map((n) => (
-                <NodeCard key={n.name} org={org} node={n} now={now} />
+                <NodeCard key={n.name} server={server} org={org} node={n} now={now} />
               ))}
             </ul>
             <div className="hidden overflow-x-auto sm:block">
@@ -379,7 +381,7 @@ export function FleetDashboard({
                 </thead>
                 <tbody>
                   {capped.map((n) => (
-                    <NodeRow key={n.name} org={org} node={n} now={now} />
+                    <NodeRow key={n.name} server={server} org={org} node={n} now={now} />
                   ))}
                 </tbody>
               </table>
@@ -399,10 +401,12 @@ export function FleetDashboard({
 }
 
 function NodeRow({
+  server,
   org,
   node,
   now,
 }: {
+  server: string;
   org: string;
   node: NodeSummary;
   now: number;
@@ -411,7 +415,7 @@ function NodeRow({
     <tr className="border-b border-border last:border-0 hover:bg-surface-2">
       <td className="px-4 py-2">
         <a
-          href={`/orgs/${org}/nodes/${encodeURIComponent(node.name)}`}
+          href={`/servers/${server}/orgs/${org}/nodes/${encodeURIComponent(node.name)}`}
           className="font-mono text-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           {node.name}
@@ -449,10 +453,12 @@ function NodeRow({
 
 /** Phone layout for one node: name + last check-in, status chips, details. */
 function NodeCard({
+  server,
   org,
   node,
   now,
 }: {
+  server: string;
   org: string;
   node: NodeSummary;
   now: number;
@@ -464,7 +470,7 @@ function NodeCard({
     <li className="space-y-1.5 px-4 py-3">
       <div className="flex items-baseline justify-between gap-3">
         <a
-          href={`/orgs/${org}/nodes/${encodeURIComponent(node.name)}`}
+          href={`/servers/${server}/orgs/${org}/nodes/${encodeURIComponent(node.name)}`}
           className="min-w-0 break-all font-mono text-sm text-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           {node.name}

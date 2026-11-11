@@ -3,12 +3,10 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   authenticate: vi.fn(),
-  getConfig: vi.fn(),
-  session: { username: "", displayName: "", loginAt: 0, save: vi.fn() },
+  session: { accountId: "", loginAt: 0, save: vi.fn() },
 }));
 
-vi.mock("@/lib/cinc/auth", () => ({ authenticate: mocks.authenticate }));
-vi.mock("@/lib/config", () => ({ getConfig: mocks.getConfig }));
+vi.mock("@/lib/dashboard/auth", () => ({ authenticate: mocks.authenticate }));
 vi.mock("@/lib/session", () => ({
   getSession: async () => mocks.session,
   cookieSecure: () => true,
@@ -24,7 +22,7 @@ function login(
   headers: Record<string, string>,
   body: unknown = { username: "anna", password: "anna123" },
 ): NextRequest {
-  return new NextRequest("https://console.test/api/auth/login", {
+  return new NextRequest("https://dashboard.test/api/auth/login", {
     method: "POST",
     headers,
     body: typeof body === "string" ? body : JSON.stringify(body),
@@ -32,21 +30,20 @@ function login(
 }
 
 const jsonHeaders = {
-  host: "console.test",
+  host: "dashboard.test",
   "content-type": "application/json",
   "sec-fetch-site": "same-origin",
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getConfig.mockReturnValue({ authMode: "local" });
-  mocks.authenticate.mockResolvedValue({ username: "anna", displayName: "Anna" });
+  mocks.authenticate.mockResolvedValue({ id: "acct-1", username: "anna", displayName: "Anna" });
 });
 
-test("the console's own login succeeds and seeds the session", async () => {
+test("the dashboard's own login succeeds and seeds the session", async () => {
   const res = await POST(login(jsonHeaders));
   expect(res.status).toBe(200);
-  expect(mocks.session.username).toBe("anna");
+  expect(mocks.session.accountId).toBe("acct-1");
   expect(mocks.session.save).toHaveBeenCalled();
 });
 
@@ -66,7 +63,7 @@ test("a text/plain body is refused (the no-preflight CSRF shape)", async () => {
   // Request.json() would happily parse it.
   const res = await POST(
     login(
-      { host: "console.test", "content-type": "text/plain" },
+      { host: "dashboard.test", "content-type": "text/plain" },
       '{"username":"attacker","password":"pw"}',
     ),
   );

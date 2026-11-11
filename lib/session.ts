@@ -4,8 +4,7 @@ import { getIronSession, type IronSession, type SessionOptions } from "iron-sess
 import { getConfig } from "./config";
 
 export type SessionData = {
-  username?: string;
-  displayName?: string;
+  accountId?: string;
   loginAt?: number;
 };
 
@@ -29,7 +28,7 @@ export function buildSessionOptions(isSecure: boolean = cookieSecure()): Session
 
   return {
     password: cfg.sessionSecret,
-    cookieName: "cinc_console",
+    cookieName: "cinc_dashboard",
     ttl: cfg.sessionTtlSeconds,
     cookieOptions: {
       httpOnly: true,
@@ -53,9 +52,9 @@ export class Unauthorized extends Error {
   }
 }
 
-/** Returns the logged-in username or throws Unauthorized. */
-export async function requireUser(): Promise<string> {
+/** Returns the logged-in dashboard account's id or throws Unauthorized. */
+export async function requireAccountId(): Promise<string> {
   const s = await getSession();
-  if (!s.username) throw new Unauthorized();
-  return s.username;
+  if (!s.accountId) throw new Unauthorized();
+  return s.accountId;
 }

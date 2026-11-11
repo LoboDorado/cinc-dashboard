@@ -55,6 +55,15 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
+# scripts/migrate.mjs and scripts/break-glass.mjs are plain Node scripts, not
+# part of the app's own import graph, so standalone's output tracing doesn't
+# pick them up on its own -- copy them (and migrate.mjs's .sql files)
+# explicitly so `docker run <image> node scripts/migrate.mjs` works without a
+# full checkout. Both only need the `pg` package, already traced into
+# node_modules above because the app itself imports it (lib/db/client.ts).
+COPY --from=build /app/scripts/migrate.mjs ./scripts/migrate.mjs
+COPY --from=build /app/scripts/break-glass.mjs ./scripts/break-glass.mjs
+COPY --from=build /app/lib/db/migrations ./lib/db/migrations
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \

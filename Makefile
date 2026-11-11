@@ -1,9 +1,9 @@
-# cinc-console developer tasks.
+# cinc-dashboard developer tasks.
 # Run `make help` for a list.
 
-IMAGE ?= ghcr.io/cinc-project/cinc-console
+IMAGE ?= ghcr.io/cinc-project/cinc-dashboard
 TAG ?= dev
-CHART := deploy/helm/cinc-console
+CHART := deploy/helm/cinc-dashboard
 
 .DEFAULT_GOAL := help
 
@@ -47,13 +47,15 @@ docker-build: ## Build the container image ($(IMAGE):$(TAG))
 smoke: ## Build the image and verify /api/healthz
 	bash scripts/smoke.sh
 
+HELM_DUMMY_VALUES := --set cincServerUrl=https://chef.example.com --set webuiKey=DUMMY --set dashboardDatabaseUrl=postgres://user:pass@host:5432/cinc_dashboard
+
 .PHONY: helm-lint
 helm-lint: ## Lint the Helm chart
-	helm lint $(CHART) --set cincServerUrl=https://chef.example.com --set webuiKey=DUMMY
+	helm lint $(CHART) $(HELM_DUMMY_VALUES)
 
 .PHONY: helm-template
 helm-template: ## Render the Helm chart
-	helm template c $(CHART) --set cincServerUrl=https://chef.example.com --set webuiKey=DUMMY
+	helm template c $(CHART) $(HELM_DUMMY_VALUES)
 
 .PHONY: release-pr
 release-pr: ## Open a release PR (VERSION=0.5.0); merging it cuts the release

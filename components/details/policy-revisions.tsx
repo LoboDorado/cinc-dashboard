@@ -20,13 +20,13 @@ function explain(error: string): string {
  * list, where the policy no longer exists.
  */
 export function PolicyRevisions({
-  org,
+  listHref,
   name,
   revisions,
   onDeleteRevision,
   onDeletePolicy,
 }: {
-  org: string;
+  listHref: string;
   name: string;
   revisions: string[];
   onDeleteRevision: (revision: string) => Promise<ActionResult>;
@@ -39,7 +39,6 @@ export function PolicyRevisions({
   const [confirmAll, setConfirmAll] = useState(false);
 
   const sorted = [...revisions].sort().reverse();
-  const listHref = `/orgs/${org}/policies`;
 
   function removeRevision(revision: string) {
     setConfirmRevision(null);
