@@ -129,13 +129,14 @@ reacts to 200/403/404 exactly as before; a role-grant denial produces the
 same `{ error: "forbidden" }` shape as a real 403 from the server.
 
 **This is a foundational layer, not the finished product.** Landed so far:
-the rename, the database/auth/RBAC/audit core, and the routing move to
-`/servers/[server]/orgs/[org]/`. Not yet built: the admin UI for managing
-registered servers/collectors/accounts/role grants
-(`app/admin/**`, `app/servers/[server]/admin/**`,
-`app/servers/[server]/orgs/[org]/admin/**`), the audit log viewers, and the
-Collector integration (Nodes attribute filtering, Compliance) that originally
-motivated this work -- all tracked as follow-up plans, not done yet.
+the rename, the database/auth/RBAC/audit core, the routing move to
+`/servers/[server]/orgs/[org]/`, the admin UI for managing registered
+servers/collectors/accounts/role grants at all three scopes (`app/admin/**`,
+`app/servers/[server]/admin/**`, `app/servers/[server]/orgs/[org]/admin/**`),
+the audit log viewers at those same three scopes, and an e2e suite covering
+all of it. Not yet built: the Collector integration (Nodes attribute
+filtering, Compliance) that originally motivated this work -- tracked as a
+follow-up plan, not done yet.
 
 ## Conventions
 
@@ -309,7 +310,7 @@ Start the app with `CINC_SERVER_URL=http://127.0.0.1:8889` (the default
 `CINC_DASHBOARD_DATABASE_URL`, and `CINC_DASHBOARD_ENCRYPTION_KEY` set. On
 first boot with an empty database it auto-registers that server (named
 `default`, impersonating `CINC_AUTH_ACTOR` if set, else `pivotal` — review
-that in the (not yet built) admin UI before relying on it for anything real)
+that in the admin UI's Servers section before relying on it for anything real)
 and prints a one-time setup token to the console. Visit `/setup` with that
 token to create the first dashboard account, granted `platform_admin` — that
 account already has full access to the auto-registered server, no separate
@@ -319,16 +320,17 @@ grant needed.
 dashboard login** — dashboard accounts are a separate identity, and every
 request to a registered server signs as that server's one configured shared
 identity regardless of which dashboard account triggered it. To exercise a
-narrower role (Org Viewer, Server Object Manager, …) before the admin UI
-exists, insert a `role_grants` row directly for a second dashboard account
-created via `/setup`'s model (or `scripts/break-glass.mjs new-admin` plus a
-manual `UPDATE role_grants` to downgrade it) and confirm the UI's "forbidden"
-handling — that's now a dashboard-side decision (`lib/admin/access.ts`), not
-a 403 from the Cinc Server's own ACLs.
+narrower role (Org Viewer, Server Object Manager, …), create a second
+dashboard account and grant it from `/admin/accounts` (or a server/org's own
+delegated `admin/roles` surface) and confirm the UI's "forbidden" handling —
+that's now a dashboard-side decision (`lib/admin/access.ts`), not a 403 from
+the Cinc Server's own ACLs.
 
-`make e2e` doesn't use `dev/test-repo`; it starts its own server from
-`e2e/fixtures/state`. (Its dashboard-account/Postgres setup needs updating to
-match the above — not done yet, tracked separately from the core migration.)
+`make e2e` doesn't use `dev/test-repo`; it starts its own cinc-server-ng from
+`e2e/fixtures/state`, plus a throwaway Postgres (`scripts/e2e.sh` manages
+both, and seeds the dashboard accounts the suite logs in as directly via
+`e2e/fixtures/seed-accounts.mjs` — there's no standing bootstrap admin to log
+in with otherwise).
 
 Design spec and implementation plan live in `docs/superpowers/`. The plan for
 this multi-server/RBAC foundation itself isn't there yet — ask for it if you
