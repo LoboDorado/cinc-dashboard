@@ -56,6 +56,8 @@ export function RoleGrantForm({
   rolesForScope,
   scopeKinds = ["platform", "server", "org"],
   fixedServerId,
+  fixedOrg,
+  fixedTargetAccountId,
   onListOrgs,
   onSubmit,
   cancelHref,
@@ -65,14 +67,30 @@ export function RoleGrantForm({
   scopeKinds?: ScopeKind[];
   /** When set, the server picker is hidden and every server/org scope uses this id. */
   fixedServerId?: string;
-  onListOrgs: (serverId: string) => Promise<string[]>;
-  onSubmit: (input: { role: Role; scope: GrantScope; objectTypes: ObjectType[] }) => Promise<ActionResult>;
+  /** When set (alongside `fixedServerId`), the org picker is hidden and every org scope uses this name. */
+  fixedOrg?: string;
+  /**
+   * When set, the target-account field is hidden and `target` is just this id
+   * echoed back (the platform-wide surface, where the account is already
+   * fixed by the URL). Otherwise `target` is a typed username, resolved to an
+   * account server-side -- the delegated server/org surfaces don't get to
+   * browse the full account roster, only grant to an account they can name.
+   */
+  fixedTargetAccountId?: string;
+  onListOrgs?: (serverId: string) => Promise<string[]>;
+  onSubmit: (input: {
+    target: string;
+    role: Role;
+    scope: GrantScope;
+    objectTypes: ObjectType[];
+  }) => Promise<ActionResult>;
   cancelHref: string;
 }) {
   const router = useRouter();
   const [scopeKind, setScopeKind] = useState<ScopeKind>(scopeKinds[0]);
+  const [target, setTarget] = useState(fixedTargetAccountId ?? "");
   const [serverId, setServerId] = useState(fixedServerId ?? allServers[0]?.id ?? "");
-  const [org, setOrg] = useState("");
+  const [org, setOrg] = useState(fixedOrg ?? "");
   const [orgOptions, setOrgOptions] = useState<string[]>([]);
   const [role, setRole] = useState<Role | "">("");
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
@@ -99,8 +117,10 @@ export function RoleGrantForm({
     setObjectTypes((types) => (checked ? [...types, type] : types.filter((t) => t !== type)));
   }
 
+  const needsOrg = scopeKind === "org" && !fixedOrg;
+
   useEffect(() => {
-    if (scopeKind !== "org" || !serverId) return;
+    if (!needsOrg || !serverId || !onListOrgs) return;
     let cancelled = false;
     onListOrgs(serverId).then((orgs) => {
       if (!cancelled) setOrgOptions(orgs);
@@ -108,11 +128,11 @@ export function RoleGrantForm({
     return () => {
       cancelled = true;
     };
-  }, [scopeKind, serverId, onListOrgs]);
+  }, [needsOrg, serverId, onListOrgs]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!role) return;
+    if (!role || !target.trim()) return;
     setError(null);
 
     const scope: GrantScope =
@@ -120,10 +140,11 @@ export function RoleGrantForm({
         ? { kind: "platform" }
         : scopeKind === "server"
           ? { kind: "server", serverId }
-          : { kind: "org", serverId, org };
+          : { kind: "org", serverId, org: fixedOrg ?? org };
 
     startTransition(async () => {
       const res = await onSubmit({
+        target: fixedTargetAccountId ?? target,
         role,
         scope,
         objectTypes: isObjectManagerRole(role) ? objectTypes : [],
@@ -138,12 +159,31 @@ export function RoleGrantForm({
   }
 
   const needsServer = scopeKind !== "platform" && !fixedServerId;
-  const needsOrg = scopeKind === "org";
-  const canSubmit = role !== "" && (!needsServer || serverId !== "") && (!needsOrg || org.trim() !== "");
+  const needsTarget = !fixedTargetAccountId;
+  const canSubmit =
+    role !== "" &&
+    (!needsTarget || target.trim() !== "") &&
+    (!needsServer || serverId !== "") &&
+    (!needsOrg || org.trim() !== "");
 
   return (
     <Card>
       <form onSubmit={submit} className="max-w-xl space-y-4">
+        {needsTarget && (
+          <div className="space-y-1">
+            <label htmlFor="grant-target" className="block text-sm text-muted">
+              Account username
+            </label>
+            <Input
+              id="grant-target"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+        )}
+
         {scopeKinds.length > 1 && (
           <fieldset className="space-y-2">
             <legend className="text-sm text-muted">Scope</legend>

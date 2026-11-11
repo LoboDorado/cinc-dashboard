@@ -2,7 +2,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { currentAccount } from "@/lib/guard";
-import { isPlatformMemberAccount, requireScopeAccess, listReachableOrgs } from "@/lib/admin/access";
+import {
+  isPlatformMemberAccount,
+  requireScopeAccess,
+  listReachableOrgs,
+  canManageRoleGrants,
+} from "@/lib/admin/access";
 import { Card } from "@/components/ui/card";
 import { UserMenu } from "@/components/user-menu";
 import { SiteFooter } from "@/components/site-footer";
@@ -27,7 +32,10 @@ export default async function ServerOrgsPage({
     redirect(`/servers/${server}/orgs/${orgs[0].name}`);
   }
 
-  const isPlatformMember = await isPlatformMemberAccount(account.id);
+  const [isPlatformMember, canManageServerRoles] = await Promise.all([
+    isPlatformMemberAccount(account.id),
+    canManageRoleGrants(account.id, server),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -48,9 +56,16 @@ export default async function ServerOrgsPage({
       </header>
 
       <div className="mx-auto max-w-3xl p-6">
-        <h2 className="mb-4 text-sm uppercase tracking-wide text-muted">
-          Organizations
-        </h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm uppercase tracking-wide text-muted">
+            Organizations
+          </h2>
+          {canManageServerRoles && (
+            <Link href={`/servers/${server}/admin/roles`} className="text-sm text-link hover:underline">
+              Manage this server&apos;s role grants
+            </Link>
+          )}
+        </div>
 
         {orgs.length === 0 ? (
           <p className="text-muted">

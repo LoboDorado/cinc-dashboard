@@ -6,18 +6,25 @@ vi.mock("@/lib/guard", () => ({
   currentAccount: async () => ({ id: "acct-1", username: "alice", displayName: "Alice", authSource: "local" }),
 }));
 
-const { requireScopeAccess, listReachableOrgs, listReachableServers, isPlatformMemberAccount } =
-  vi.hoisted(() => ({
-    requireScopeAccess: vi.fn(),
-    listReachableOrgs: vi.fn(),
-    listReachableServers: vi.fn(),
-    isPlatformMemberAccount: vi.fn(),
-  }));
+const {
+  requireScopeAccess,
+  listReachableOrgs,
+  listReachableServers,
+  isPlatformMemberAccount,
+  canManageRoleGrants,
+} = vi.hoisted(() => ({
+  requireScopeAccess: vi.fn(),
+  listReachableOrgs: vi.fn(),
+  listReachableServers: vi.fn(),
+  isPlatformMemberAccount: vi.fn(),
+  canManageRoleGrants: vi.fn(),
+}));
 vi.mock("@/lib/admin/access", () => ({
   requireScopeAccess,
   listReachableOrgs,
   listReachableServers,
   isPlatformMemberAccount,
+  canManageRoleGrants,
 }));
 
 // notFound() throws in Next; mirror that with a recognizable sentinel.
@@ -43,6 +50,7 @@ beforeEach(() => {
   listReachableServers.mockReset();
   listReachableServers.mockResolvedValue([{ id: "s1", name: "Primary" }]);
   isPlatformMemberAccount.mockReset().mockResolvedValue(false);
+  canManageRoleGrants.mockReset().mockResolvedValue(false);
 });
 
 test("renders the shell for an org the account can reach", async () => {
@@ -54,6 +62,15 @@ test("renders the shell for an org the account can reach", async () => {
   expect(el.props.orgs).toEqual([{ name: "acme" }, { name: "beta" }]);
   // The signed-in footer shows the dashboard version from package.json.
   expect(el.props.version).toBe(pkg.version);
+});
+
+test("threads canManageRoleGrants through as the shell's canManageRoles prop", async () => {
+  requireScopeAccess.mockResolvedValueOnce(true);
+  listReachableOrgs.mockResolvedValueOnce([{ name: "acme" }]);
+  canManageRoleGrants.mockResolvedValueOnce(true);
+  const el = await render("s1", "acme");
+  expect(canManageRoleGrants).toHaveBeenCalledWith("acct-1", "s1", "acme");
+  expect(el.props.canManageRoles).toBe(true);
 });
 
 test("404s a bogus org the account has no grant for", async () => {

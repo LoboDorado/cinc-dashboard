@@ -12,6 +12,7 @@ import { listAllOrgs, type Org } from "../cinc/orgs";
 import {
   canAccessObject,
   canAccessScope,
+  canViewAssignments,
   isPlatformAdmin,
   isPlatformMember,
   isScopeAdmin,
@@ -268,6 +269,21 @@ export async function requireScopeAdmin(
     org,
     [brand]: true,
   } as AuthorizedActionContext;
+}
+
+/**
+ * True if `accountId` can reach the delegated role-grant admin surface for
+ * `serverId` (and `org`, if given) -- a Platform Admin, that server's own
+ * Server Admin, or (when `org` is given) that org's own Org Admin. This only
+ * gates whether the surface renders; `lib/admin/grants.ts`'s `grantableRoles`
+ * check is what actually caps which roles it can hand out there.
+ */
+export async function canManageRoleGrants(
+  accountId: string,
+  serverId: string,
+  org?: string,
+): Promise<boolean> {
+  return canViewAssignments(await loadGrants(accountId), serverId, org);
 }
 
 /** True if `accountId` can see (but not necessarily change) the platform admin area. */

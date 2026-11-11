@@ -20,6 +20,7 @@ export function AppShell({
   orgs,
   displayName,
   isPlatformMember = false,
+  canManageRoles = false,
   version,
   children,
 }: {
@@ -29,6 +30,7 @@ export function AppShell({
   orgs: Org[];
   displayName: string;
   isPlatformMember?: boolean;
+  canManageRoles?: boolean;
   version: string;
   children: ReactNode;
 }) {
@@ -49,6 +51,7 @@ export function AppShell({
             org={org}
             displayName={displayName}
             isPlatformMember={isPlatformMember}
+            canManageRoles={canManageRoles}
           />
           <Link
             href={`/servers/${server}/orgs`}
@@ -83,7 +86,7 @@ export function AppShell({
           aria-label="Primary"
           className="hidden w-48 shrink-0 border-r border-border bg-surface p-3 md:block"
         >
-          <PrimaryNavLinks server={server} org={org} />
+          <PrimaryNavLinks server={server} org={org} canManageRoles={canManageRoles} />
         </nav>
 
         <main id="main-content" tabIndex={-1} className="flex-1 p-4 md:p-6">

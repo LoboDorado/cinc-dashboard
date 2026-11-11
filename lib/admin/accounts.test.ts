@@ -6,6 +6,7 @@ vi.mock("../db/client", () => ({ getPool: () => ({ query }) }));
 
 import {
   listDashboardAccounts,
+  getAccountByUsername,
   createLocalDashboardAccount,
   createLdapDashboardAccount,
   AccountConflictError,
@@ -22,6 +23,25 @@ test("listDashboardAccounts maps rows to camelCase", async () => {
   expect(await listDashboardAccounts()).toEqual([
     { id: "a1", username: "alice", displayName: "Alice", authSource: "local", createdAt: "now" },
   ]);
+});
+
+test("getAccountByUsername finds a matching account", async () => {
+  query.mockResolvedValueOnce({
+    rows: [{ id: "a1", username: "alice", display_name: "Alice", auth_source: "local", created_at: "now" }],
+  });
+  await expect(getAccountByUsername("alice")).resolves.toEqual({
+    id: "a1",
+    username: "alice",
+    displayName: "Alice",
+    authSource: "local",
+    createdAt: "now",
+  });
+  expect(query.mock.calls[0][1]).toEqual(["alice"]);
+});
+
+test("getAccountByUsername returns null when there's no match", async () => {
+  query.mockResolvedValueOnce({ rows: [] });
+  await expect(getAccountByUsername("nobody")).resolves.toBeNull();
 });
 
 test("createLocalDashboardAccount stores a hashed password, not the plaintext", async () => {

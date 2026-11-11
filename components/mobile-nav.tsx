@@ -25,11 +25,13 @@ export function MobileNav({
   org,
   displayName,
   isPlatformMember = false,
+  canManageRoles = false,
 }: {
   server: string;
   org: string;
   displayName: string;
   isPlatformMember?: boolean;
+  canManageRoles?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -113,7 +115,7 @@ export function MobileNav({
                 </button>
               </div>
               <nav aria-label="Primary" className="flex-1 overflow-y-auto p-3">
-                <PrimaryNavLinks server={server} org={org} />
+                <PrimaryNavLinks server={server} org={org} canManageRoles={canManageRoles} />
               </nav>
               <div className="border-t border-border px-4 py-3">
                 <UserMenu name={displayName} isPlatformMember={isPlatformMember} />

@@ -6,6 +6,7 @@ import {
   listReachableOrgs,
   listReachableServers,
   isPlatformMemberAccount,
+  canManageRoleGrants,
 } from "@/lib/admin/access";
 import { AppShell } from "@/components/app-shell";
 import { APP_VERSION } from "@/lib/version";
@@ -27,10 +28,11 @@ export default async function OrgLayout({
     notFound();
   }
 
-  const [orgs, servers, isPlatformMember] = await Promise.all([
+  const [orgs, servers, isPlatformMember, canManageRoles] = await Promise.all([
     listReachableOrgs(account.id, server),
     listReachableServers(account.id),
     isPlatformMemberAccount(account.id),
+    canManageRoleGrants(account.id, server, org),
   ]);
 
   return (
@@ -41,6 +43,7 @@ export default async function OrgLayout({
       orgs={orgs}
       displayName={account.displayName}
       isPlatformMember={isPlatformMember}
+      canManageRoles={canManageRoles}
       version={APP_VERSION}
     >
       {children}

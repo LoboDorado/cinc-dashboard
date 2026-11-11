@@ -19,9 +19,19 @@ function navLinkClass(active: boolean): string {
  * The org's section links — one list rendered by both the desktop sidebar and
  * the phone drawer, so the two can't drift apart.
  */
-export function PrimaryNavLinks({ server, org }: { server: string; org: string }) {
+export function PrimaryNavLinks({
+  server,
+  org,
+  canManageRoles = false,
+}: {
+  server: string;
+  org: string;
+  /** This account can reach this org's delegated role-grant admin surface (Platform/Server/Org Admin). */
+  canManageRoles?: boolean;
+}) {
   const pathname = usePathname();
   const base = `/servers/${server}/orgs/${org}`;
+  const rolesHref = `${base}/admin/roles`;
   return (
     <ul className="space-y-1">
       {/* Dashboard is the org root, not an object section, so it lives outside
@@ -51,6 +61,17 @@ export function PrimaryNavLinks({ server, org }: { server: string; org: string }
           </li>
         );
       })}
+      {canManageRoles && (
+        <li className="mt-2 border-t border-border pt-2">
+          <Link
+            href={rolesHref}
+            aria-current={pathname.startsWith(rolesHref) ? "page" : undefined}
+            className={navLinkClass(pathname.startsWith(rolesHref))}
+          >
+            Role grants
+          </Link>
+        </li>
+      )}
     </ul>
   );
 }

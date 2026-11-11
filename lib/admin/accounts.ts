@@ -1,6 +1,9 @@
-// Platform-Admin-only account management: list every dashboard account, and
-// create new ones. Self-service profile/password updates for an account's
-// own login live in lib/dashboard/accounts.ts instead.
+// Dashboard account management for admin surfaces: listing every account and
+// creating new ones is Platform-Admin-only, but looking a single account up
+// by username is also used by the delegated server/org role-grant surfaces
+// (lib/admin/grants.ts's callers), which may only grant to an account they
+// can name -- not browse the full roster. Self-service profile/password
+// updates for an account's own login live in lib/dashboard/accounts.ts instead.
 import "server-only";
 import { getPool } from "../db/client";
 import { hashPassword } from "../dashboard/password";
@@ -21,17 +24,29 @@ type AccountRow = {
   created_at: string;
 };
 
-export async function listDashboardAccounts(): Promise<DashboardAccountSummary[]> {
-  const { rows } = await getPool().query<AccountRow>(
-    "SELECT id, username, display_name, auth_source, created_at FROM dashboard_accounts ORDER BY username",
-  );
-  return rows.map((r) => ({
+function mapAccountRow(r: AccountRow): DashboardAccountSummary {
+  return {
     id: r.id,
     username: r.username,
     displayName: r.display_name,
     authSource: r.auth_source,
     createdAt: r.created_at,
-  }));
+  };
+}
+
+export async function listDashboardAccounts(): Promise<DashboardAccountSummary[]> {
+  const { rows } = await getPool().query<AccountRow>(
+    "SELECT id, username, display_name, auth_source, created_at FROM dashboard_accounts ORDER BY username",
+  );
+  return rows.map(mapAccountRow);
+}
+
+export async function getAccountByUsername(username: string): Promise<DashboardAccountSummary | null> {
+  const { rows } = await getPool().query<AccountRow>(
+    "SELECT id, username, display_name, auth_source, created_at FROM dashboard_accounts WHERE username = $1",
+    [username],
+  );
+  return rows[0] ? mapAccountRow(rows[0]) : null;
 }
 
 export class AccountConflictError extends Error {
