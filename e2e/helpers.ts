@@ -27,9 +27,23 @@ if (!SERVER) {
 /** Seeded by e2e/fixtures/state; see scripts/e2e.sh. */
 export const ORG = "acme";
 
+/**
+ * A second org on the same registered server, also seeded by
+ * e2e/fixtures/state but with no objects of its own -- e2e-admin
+ * (platform_admin) reaches both, which is what makes it useful for proving
+ * cross-org aggregation actually merges scopes rather than just plumbing one
+ * through.
+ */
+export const ORG2 = "beta";
+
+/** A path under a given org on this server, e.g. scopedPath("beta", "roles") -> /servers/<id>/orgs/beta/roles. */
+export function scopedPath(org: string, ...segments: string[]): string {
+  return [`/servers/${SERVER}/orgs/${org}`, ...segments].join("/");
+}
+
 /** A path under this server/org, e.g. orgPath("nodes", "seed-web01") -> /servers/<id>/orgs/acme/nodes/seed-web01. */
 export function orgPath(...segments: string[]): string {
-  return [`/servers/${SERVER}/orgs/${ORG}`, ...segments].join("/");
+  return scopedPath(ORG, ...segments);
 }
 
 /** Sign in through the real form; waits until the app has left /login. */

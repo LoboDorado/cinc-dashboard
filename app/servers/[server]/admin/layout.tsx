@@ -38,14 +38,14 @@ export default async function ServerAdminLayout({
       <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
         <div className="flex items-center gap-4">
           <Link
-            href={`/servers/${server}/orgs`}
+            href="/"
             className="flex items-center gap-2 text-lg font-semibold tracking-tight"
           >
             <Image src="/cinc/logo-icon.png" alt="Cinc" width={22} height={22} priority unoptimized />
             <span className="text-text">dashboard</span>
           </Link>
-          <Link href={`/servers/${server}/orgs`} className="text-sm text-muted hover:text-link">
-            ← back to organizations
+          <Link href="/" className="text-sm text-muted hover:text-link">
+            ← back to dashboard
           </Link>
         </div>
         <UserMenu name={account.displayName} isPlatformMember={isPlatformMember} />

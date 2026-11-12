@@ -22,11 +22,34 @@ test("login page has no WCAG AA violations", async ({ page }) => {
   expect(await violations(page, "/login")).toEqual([]);
 });
 
-test("nodes list has no WCAG AA violations", async ({ page }) => {
+test("the aggregated nodes list has no WCAG AA violations", async ({ page }) => {
   await login(page, ADMIN);
-  await page.goto(orgPath("nodes"));
+  await page.goto("/nodes");
   await expect(page.getByRole("link", { name: "seed-web01" })).toBeVisible();
-  expect(await violations(page, orgPath("nodes"))).toEqual([]);
+  expect(await violations(page, "/nodes")).toEqual([]);
+});
+
+test("the aggregated Fleet dashboard has no WCAG AA violations", async ({ page }) => {
+  await login(page, ADMIN);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: "seed-web01" })).toBeVisible();
+  expect(await violations(page, "/")).toEqual([]);
+});
+
+test("the create-form scope picker has no WCAG AA violations", async ({ page }) => {
+  // e2e-admin reaches more than one org, so this is the only fixture path
+  // that renders the ScopePicker's <select> -- the single-scope auto-skip
+  // path never shows it.
+  await login(page, ADMIN);
+  await page.goto("/roles/new");
+  await expect(page.getByLabel("Server and organization to create in")).toBeVisible();
+  expect(await violations(page, "/roles/new (picker)")).toEqual([]);
+
+  await page
+    .getByLabel("Server and organization to create in")
+    .selectOption({ label: "default / acme" });
+  await expect(page.getByRole("heading", { name: "New role" })).toBeVisible();
+  expect(await violations(page, "/roles/new (form shown)")).toEqual([]);
 });
 
 test("platform admin pages have no WCAG AA violations", async ({ page }) => {

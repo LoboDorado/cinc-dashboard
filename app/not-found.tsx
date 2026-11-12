@@ -16,8 +16,8 @@ export default function NotFound() {
           isn&rsquo;t on the menu. It was deleted, never existed, or someone
           fat-fingered the URL. (No judgment.)
         </p>
-        <Link href="/servers">
-          <Button>Back to your servers</Button>
+        <Link href="/">
+          <Button>Back to the dashboard</Button>
         </Link>
       </div>
     </main>

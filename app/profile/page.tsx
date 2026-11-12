@@ -16,7 +16,7 @@ export default async function ProfilePage() {
     <main className="flex-1">
       <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
         <Link
-          href="/servers"
+          href="/"
           className="flex items-center gap-2 text-lg font-semibold tracking-tight"
         >
           <Image

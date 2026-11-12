@@ -2,12 +2,13 @@ import { describe, it, expect } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { axe } from "@/test/axe";
 import userEvent from "@testing-library/user-event";
-import { NodesTable } from "./nodes-table";
+import { NodesTable, type NodeRow } from "./nodes-table";
 import type { NodeSummary } from "@/lib/cinc/fleet";
 
-function node(over: Partial<NodeSummary>): NodeSummary {
-  return {
-    name: "n",
+function node(over: Partial<NodeRow>): NodeRow {
+  const name = over.name ?? "n";
+  const summary: NodeSummary = {
+    name,
     status: "ok",
     missing: false,
     unconfigured: false,
@@ -20,15 +21,15 @@ function node(over: Partial<NodeSummary>): NodeSummary {
     environment: "production",
     platform: "ubuntu",
     platformVersion: "24.04",
-    ...over,
+    policyGroup: null,
   };
+  return { ...summary, href: `/orgs/acme/nodes/${name}`, ...over };
 }
 
-const many = (n: number): NodeSummary[] =>
+const many = (n: number): NodeRow[] =>
   Array.from({ length: n }, (_, i) => node({ name: `node${String(i).padStart(3, "0")}` }));
 
 const base = {
-  basePath: "/orgs/acme/nodes",
   createHref: "/orgs/acme/nodes/new",
   generatedAt: 1_700_000_000_000,
 };
@@ -118,4 +119,114 @@ it("has no axe violations", async () => {
     />,
   );
   expect(await axe(container)).toHaveNoViolations();
+});
+
+describe("aggregated rows (server/org columns)", () => {
+  const aggregatedNodes: NodeRow[] = [
+    node({ name: "web", server: "Server Two", org: "widgets", href: "/servers/s2/orgs/widgets/nodes/web" }),
+    node({ name: "web", server: "Server One", org: "acme", href: "/servers/s1/orgs/acme/nodes/web" }),
+  ];
+
+  it("renders Server and Org columns only when rows carry them", () => {
+    render(<NodesTable {...base} nodes={aggregatedNodes} />);
+    expect(screen.getByRole("columnheader", { name: /server/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /org/i })).toBeInTheDocument();
+    expect(screen.getByText("Server One")).toBeInTheDocument();
+    expect(screen.getByText("widgets")).toBeInTheDocument();
+  });
+
+  it("does not render Server/Org columns for single-scope rows", () => {
+    render(<NodesTable {...base} nodes={many(3)} />);
+    expect(screen.queryByRole("columnheader", { name: /server/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /^org$/i })).not.toBeInTheDocument();
+  });
+
+  it("filter text matches server and org, not just name", async () => {
+    const user = userEvent.setup();
+    render(<NodesTable {...base} nodes={aggregatedNodes} />);
+    await user.type(screen.getByPlaceholderText(/filter nodes/i), "widgets");
+    expect(screen.getByText("1–1 of 1 (2 total)")).toBeInTheDocument();
+  });
+
+  it("each row links to its own href, not a shared basePath", () => {
+    render(<NodesTable {...base} nodes={aggregatedNodes} />);
+    const links = screen.getAllByRole("link", { name: "web" });
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(
+      expect.arrayContaining([
+        "/servers/s2/orgs/widgets/nodes/web",
+        "/servers/s1/orgs/acme/nodes/web",
+      ]),
+    );
+  });
+
+  it("has no axe violations with the extra columns", async () => {
+    const { container } = render(<NodesTable {...base} nodes={aggregatedNodes} />);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("facet filters", () => {
+  const mixed: NodeRow[] = [
+    node({ name: "web1", platform: "ubuntu", environment: "prod", policyGroup: "canary", lastCCRStatus: "success" }),
+    node({ name: "web2", platform: "rhel", environment: "staging", policyGroup: "stable", lastCCRStatus: "failure" }),
+    // No collector covers this one at all -- lastCCRStatus left undefined.
+    node({ name: "web3", platform: "ubuntu", environment: "prod", policyGroup: null }),
+  ];
+
+  it("offers only the distinct values actually present in the loaded rows", () => {
+    render(<NodesTable {...base} nodes={mixed} />);
+    const platform = screen.getByLabelText("Platform") as HTMLSelectElement;
+    const optionValues = Array.from(platform.options).map((o) => o.value);
+    expect(optionValues).toEqual(["", "rhel", "ubuntu"]);
+  });
+
+  it("does not offer facet options for values not present in this node set", () => {
+    render(<NodesTable {...base} nodes={mixed} />);
+    const platform = screen.getByLabelText("Platform") as HTMLSelectElement;
+    expect(Array.from(platform.options).map((o) => o.value)).not.toContain("windows");
+  });
+
+  it("filtering by a facet narrows the list, independent of the other facets", async () => {
+    const user = userEvent.setup();
+    render(<NodesTable {...base} nodes={mixed} />);
+    await user.selectOptions(screen.getByLabelText("Platform"), "rhel");
+    expect(screen.getByText("1–1 of 1 (3 total)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "web2" })).toBeInTheDocument();
+  });
+
+  it("a facet AND-composes with the free-text search, not OR", async () => {
+    const user = userEvent.setup();
+    render(<NodesTable {...base} nodes={mixed} />);
+    await user.selectOptions(screen.getByLabelText("Platform"), "ubuntu");
+    await user.type(screen.getByPlaceholderText(/filter nodes/i), "web3");
+    expect(screen.getByText("1–1 of 1 (3 total)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "web3" })).toBeInTheDocument();
+  });
+
+  it("offers Converge status options only for statuses present, plus (unknown) when a row lacks one", () => {
+    render(<NodesTable {...base} nodes={mixed} />);
+    const status = screen.getByLabelText("Converge status") as HTMLSelectElement;
+    const labels = Array.from(status.options).map((o) => o.textContent);
+    expect(labels).toEqual(["All Converge status", "Succeeded", "Failed", "(unknown)"]);
+  });
+
+  it("omits the (unknown) option entirely when every row has a real converge status", () => {
+    const allKnown = mixed.map((n) => ({ ...n, lastCCRStatus: "success" as const }));
+    render(<NodesTable {...base} nodes={allKnown} />);
+    const status = screen.getByLabelText("Converge status") as HTMLSelectElement;
+    expect(Array.from(status.options).map((o) => o.textContent)).not.toContain("(unknown)");
+  });
+
+  it("selecting (unknown) isolates nodes with no usable converge status, including ones no collector covers at all", async () => {
+    const user = userEvent.setup();
+    render(<NodesTable {...base} nodes={mixed} />);
+    await user.selectOptions(screen.getByLabelText("Converge status"), "(unknown)");
+    expect(screen.getByText("1–1 of 1 (3 total)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "web3" })).toBeInTheDocument();
+  });
+
+  it("has no axe violations with the facet selects present", async () => {
+    const { container } = render(<NodesTable {...base} nodes={mixed} />);
+    expect(await axe(container)).toHaveNoViolations();
+  });
 });

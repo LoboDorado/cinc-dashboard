@@ -24,12 +24,21 @@ export function NewObjectForm({
   title,
   onCreate,
   backHref,
+  onCreated,
   initialJson,
   nameKind,
 }: {
   title: string;
   onCreate: (name: string, json: string) => Promise<ActionResult>;
+  /** "← back" link target. */
   backHref: string;
+  /**
+   * Called with the new object's name on success, in place of the default
+   * `router.push(\`${backHref}/<name>\`)`. Pass this when `backHref` points at
+   * an aggregated, scope-free list (e.g. `/nodes`) but the object was created
+   * in one concrete server/org, whose detail page lives elsewhere.
+   */
+  onCreated?: (name: string) => void;
   initialJson: string;
   /** When set, the name is validated against Chef's rules for this object. */
   nameKind?: NameKind;
@@ -48,7 +57,11 @@ export function NewObjectForm({
     startTransition(async () => {
       const res = await onCreate(name, json);
       if ("ok" in res) {
-        router.push(`${backHref}/${encodeURIComponent(name)}`);
+        if (onCreated) {
+          onCreated(name);
+        } else {
+          router.push(`${backHref}/${encodeURIComponent(name)}`);
+        }
         router.refresh();
       } else {
         setError(explain(res.error));

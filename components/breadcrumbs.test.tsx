@@ -11,13 +11,20 @@ vi.mock("next/navigation", () => ({ usePathname: () => usePathnameMock() }));
 
 test("renders nothing on the org home", () => {
   setPath("/servers/s1/orgs/acme");
-  const { container } = render(<Breadcrumbs />);
+  const { container } = render(<Breadcrumbs serverName="Primary" />);
   expect(container).toBeEmptyDOMElement();
+});
+
+test("leads with the server name as plain text, not a link", () => {
+  setPath("/servers/s1/orgs/acme/data_bags/secrets/api_key");
+  render(<Breadcrumbs serverName="Primary" />);
+  expect(screen.getByText("Primary")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Primary" })).not.toBeInTheDocument();
 });
 
 test("maps the section slug to its label and marks the last crumb current", () => {
   setPath("/servers/s1/orgs/acme/data_bags/secrets/api_key");
-  render(<Breadcrumbs />);
+  render(<Breadcrumbs serverName="Primary" />);
   const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
   // org + section + bag are links; the item is the current page
   expect(screen.getByRole("link", { name: "acme" })).toHaveAttribute(
@@ -26,7 +33,7 @@ test("maps the section slug to its label and marks the last crumb current", () =
   );
   expect(screen.getByRole("link", { name: "Data Bags" })).toHaveAttribute(
     "href",
-    "/servers/s1/orgs/acme/data_bags",
+    "/data_bags",
   );
   expect(screen.getByRole("link", { name: "secrets" })).toHaveAttribute(
     "href",
@@ -38,13 +45,13 @@ test("maps the section slug to its label and marks the last crumb current", () =
 
 test("does not link the structural 'groups' segment under members", () => {
   setPath("/servers/s1/orgs/acme/members/groups/admins");
-  render(<Breadcrumbs />);
+  render(<Breadcrumbs serverName="Primary" />);
   expect(screen.queryByRole("link", { name: "groups" })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Members" })).toBeInTheDocument();
 });
 
 test("has no axe violations", async () => {
   setPath("/servers/s1/orgs/acme/data_bags/secrets/api_key");
-  const { container } = render(<Breadcrumbs />);
+  const { container } = render(<Breadcrumbs serverName="Primary" />);
   expect(await axe(container)).toHaveNoViolations();
 });

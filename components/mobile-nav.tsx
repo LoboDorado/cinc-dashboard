@@ -27,8 +27,8 @@ export function MobileNav({
   isPlatformMember = false,
   canManageRoles = false,
 }: {
-  server: string;
-  org: string;
+  server?: string;
+  org?: string;
   displayName: string;
   isPlatformMember?: boolean;
   canManageRoles?: boolean;

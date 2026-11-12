@@ -1,13 +1,16 @@
 import { currentAccountId } from "@/lib/guard";
 import { requireObjectAccess } from "@/lib/admin/access";
+import { getCollectorsForServer } from "@/lib/admin/collectors";
 import { makeResource } from "@/lib/cinc/resource";
 import { safeGet, explainRead } from "@/lib/cinc/safe-get";
 import { ObjectEditor } from "@/components/object-editor";
+import { NodeDetailTabs } from "@/components/node-detail-tabs";
 import { NodeDetails, nodePlatform } from "@/components/details/node-details";
 import { PlatformIcon } from "@/components/platform/platform-icon";
 import { getClientLifecycle } from "@/lib/cinc/client-lifecycle";
 import { versionStatus } from "@/lib/cinc/fleet";
 import { nowMs } from "@/lib/cinc/client";
+import { listPath } from "@/lib/urls";
 import { saveNode, deleteNode } from "../actions";
 
 const nodes = makeResource("nodes");
@@ -28,7 +31,6 @@ export default async function NodeDetail({
   const { server, org, name: raw } = await params;
   const name = decodeURIComponent(raw);
   const accountId = await currentAccountId();
-  const base = `/servers/${server}/orgs/${org}/nodes`;
 
   const ctxRes = await safeGet(() => requireObjectAccess(accountId, server, org, "nodes", "read"));
   if ("error" in ctxRes) {
@@ -36,11 +38,15 @@ export default async function NodeDetail({
   }
   const ctx = ctxRes.data;
 
-  // Fetch the node and the client lifecycle in parallel; the lifecycle is
-  // cached and degrades to "unavailable" on its own, so it never blocks the node.
-  const [res, lifecycle] = await Promise.all([
+  // Fetch the node, the client lifecycle, and which collectors (if any) cover
+  // this server in parallel. The lifecycle and collector lookup both degrade
+  // to their own "unavailable"/"none" state on their own, so neither blocks
+  // the node. The collector lookup is a cheap indexed join, not a network
+  // call -- it only decides the Compliance tab's CTA-vs-content state.
+  const [res, lifecycle, collectors] = await Promise.all([
     safeGet(() => nodes.get(ctx, name)),
     getClientLifecycle(nowMs()),
+    getCollectorsForServer(ctx.serverId),
   ]);
   if ("error" in res) {
     return <p className="text-sm text-danger">{explainRead(res.error)}</p>;
@@ -55,26 +61,34 @@ export default async function NodeDetail({
   );
 
   return (
-    <ObjectEditor
-      name={name}
-      titleIcon={
-        <PlatformIcon
-          platform={nodePlatform(res.data)}
-          className="h-5 w-5 text-muted"
+    <NodeDetailTabs
+      detailsPanel={
+        <ObjectEditor
+          name={name}
+          titleIcon={
+            <PlatformIcon
+              platform={nodePlatform(res.data)}
+              className="h-5 w-5 text-muted"
+            />
+          }
+          initialJson={JSON.stringify(res.data, null, 2)}
+          details={
+            <NodeDetails
+              data={res.data}
+              clientStatus={clientStatus}
+              onSaveRunList={saveNode.bind(null, server, org, name)}
+              onSaveTags={saveNode.bind(null, server, org, name)}
+            />
+          }
+          backHref={listPath("nodes")}
+          onSave={saveNode.bind(null, server, org, name)}
+          onDelete={deleteNode.bind(null, server, org, name)}
         />
       }
-      initialJson={JSON.stringify(res.data, null, 2)}
-      details={
-        <NodeDetails
-          data={res.data}
-          clientStatus={clientStatus}
-          onSaveRunList={saveNode.bind(null, server, org, name)}
-          onSaveTags={saveNode.bind(null, server, org, name)}
-        />
-      }
-      backHref={base}
-      onSave={saveNode.bind(null, server, org, name)}
-      onDelete={deleteNode.bind(null, server, org, name)}
+      hasCollector={collectors.length > 0}
+      server={server}
+      org={org}
+      nodeName={name}
     />
   );
 }

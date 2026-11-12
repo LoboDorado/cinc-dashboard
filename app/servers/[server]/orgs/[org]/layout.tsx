@@ -4,7 +4,7 @@ import { currentAccount } from "@/lib/guard";
 import {
   requireScopeAccess,
   listReachableOrgs,
-  listReachableServers,
+  getServerName,
   isPlatformMemberAccount,
   canManageRoleGrants,
 } from "@/lib/admin/access";
@@ -28,9 +28,13 @@ export default async function OrgLayout({
     notFound();
   }
 
-  const [orgs, servers, isPlatformMember, canManageRoles] = await Promise.all([
+  // listReachableOrgs still backs CommandPalette's "switch org" commands and
+  // object search; the old ServerSwitcher's full listReachableServers is gone
+  // now that there's no server picker left to feed -- a plain name lookup for
+  // the breadcrumb is all that's needed.
+  const [orgs, serverName, isPlatformMember, canManageRoles] = await Promise.all([
     listReachableOrgs(account.id, server),
-    listReachableServers(account.id),
+    getServerName(server),
     isPlatformMemberAccount(account.id),
     canManageRoleGrants(account.id, server, org),
   ]);
@@ -38,7 +42,7 @@ export default async function OrgLayout({
   return (
     <AppShell
       server={server}
-      servers={servers}
+      serverName={serverName ?? server}
       org={org}
       orgs={orgs}
       displayName={account.displayName}

@@ -4,6 +4,7 @@ import { currentAccountId } from "@/lib/guard";
 import { requireObjectAccess } from "@/lib/admin/access";
 import { makeResource } from "@/lib/cinc/resource";
 import { runAction, parseJsonObject, type ActionResult } from "@/lib/cinc/action";
+import { listPath, objectPath } from "@/lib/urls";
 
 const roles = makeResource("roles");
 
@@ -21,7 +22,7 @@ export async function saveRole(
       const ctx = await requireObjectAccess(accountId, server, org, "roles", "write");
       return roles.update(ctx, name, parsed.value);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/roles` },
+    { revalidate: [listPath("roles"), objectPath(server, org, "roles", name)] },
   );
 }
 
@@ -39,7 +40,7 @@ export async function createRole(
       const ctx = await requireObjectAccess(accountId, server, org, "roles", "write");
       return roles.create(ctx, { ...parsed.value, name });
     },
-    { revalidate: `/servers/${server}/orgs/${org}/roles` },
+    { revalidate: listPath("roles") },
   );
 }
 
@@ -54,6 +55,6 @@ export async function deleteRole(
       const ctx = await requireObjectAccess(accountId, server, org, "roles", "write");
       return roles.remove(ctx, name);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/roles` },
+    { revalidate: listPath("roles") },
   );
 }

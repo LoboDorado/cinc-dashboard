@@ -4,6 +4,7 @@ import { currentAccountId } from "@/lib/guard";
 import { requireObjectAccess } from "@/lib/admin/access";
 import { deleteCookbook, deleteCookbookVersion } from "@/lib/cinc/cookbooks";
 import { runAction, type ActionResult } from "@/lib/cinc/action";
+import { listPath } from "@/lib/urls";
 
 export async function deleteCookbookVersionAction(
   server: string,
@@ -17,7 +18,7 @@ export async function deleteCookbookVersionAction(
       const ctx = await requireObjectAccess(accountId, server, org, "cookbooks", "write");
       return deleteCookbookVersion(ctx, name, version);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/cookbooks` },
+    { revalidate: listPath("cookbooks") },
   );
 }
 
@@ -32,6 +33,6 @@ export async function deleteCookbookAction(
       const ctx = await requireObjectAccess(accountId, server, org, "cookbooks", "write");
       return deleteCookbook(ctx, name);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/cookbooks` },
+    { revalidate: listPath("cookbooks") },
   );
 }

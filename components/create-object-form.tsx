@@ -13,7 +13,7 @@ import { CookbookConstraintsField } from "./details/cookbook-constraints-field";
 import { nameError, type NameKind } from "@/lib/cinc/names";
 import type { ActionResult } from "@/lib/cinc/action";
 
-type Kind = "role" | "environment";
+export type Kind = "role" | "environment";
 
 /** Per-kind starting body. Deliberately has no `name` — the Name field is the
  * single source of truth and the create action injects it server-side. */
@@ -66,10 +66,19 @@ export function CreateObjectForm({
   kind,
   onCreate,
   backHref,
+  onCreated,
 }: {
   kind: Kind;
   onCreate: (name: string, json: string) => Promise<ActionResult>;
+  /** "← back" link target. */
   backHref: string;
+  /**
+   * Called with the new object's name on success, in place of the default
+   * `router.push(\`${backHref}/<name>\`)`. Pass this when `backHref` points at
+   * an aggregated, scope-free list (e.g. `/roles`) but the object was created
+   * in one concrete server/org, whose detail page lives elsewhere.
+   */
+  onCreated?: (name: string) => void;
 }) {
   const router = useRouter();
   const nameKind: NameKind = kind;
@@ -126,7 +135,11 @@ export function CreateObjectForm({
     startTransition(async () => {
       const res = await onCreate(trimmed, JSON.stringify(body));
       if ("ok" in res) {
-        router.push(`${backHref}/${encodeURIComponent(trimmed)}`);
+        if (onCreated) {
+          onCreated(trimmed);
+        } else {
+          router.push(`${backHref}/${encodeURIComponent(trimmed)}`);
+        }
         router.refresh();
       } else {
         setError(explain(res.error));

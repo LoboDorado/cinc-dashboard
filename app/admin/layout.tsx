@@ -14,7 +14,7 @@ import { APP_VERSION } from "@/lib/version";
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const account = await currentAccount();
   if (!(await isPlatformMemberAccount(account.id))) {
-    redirect("/servers");
+    redirect("/");
   }
 
   return (

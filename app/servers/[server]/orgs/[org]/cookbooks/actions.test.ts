@@ -35,7 +35,7 @@ test("deletes a single version and revalidates", async () => {
   });
   expect(requireObjectAccess).toHaveBeenCalledWith("acct-1", "s1", "acme", "cookbooks", "write");
   expect(deleteCookbookVersion).toHaveBeenCalledWith("ctx", "nginx", "1.2.0");
-  expect(revalidatePath).toHaveBeenCalledWith("/servers/s1/orgs/acme/cookbooks", "layout");
+  expect(revalidatePath).toHaveBeenCalledWith("/cookbooks", "layout");
 });
 
 test("deletes the whole cookbook", async () => {

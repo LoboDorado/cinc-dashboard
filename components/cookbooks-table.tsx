@@ -20,14 +20,23 @@ import {
 import { compareVersions } from "@/lib/cinc/fleet";
 import type { CookbookSummary } from "@/lib/cinc/cookbooks";
 
-const SORT_KEYS = ["name", "latest", "count"] as const;
+/**
+ * One row. `href` is fully resolved by the caller — a single-scope page has
+ * one prefix for every row, but an aggregated page's rows each point at a
+ * different server/org, so there's no single prefix to share. `server`/`org`
+ * are set only by an aggregated caller; when present, two extra sortable
+ * columns render (same convention as ResourceTable/NodesTable).
+ */
+export type CookbookRow = CookbookSummary & { href: string; server?: string; org?: string };
+
+const SORT_KEYS = ["name", "latest", "count", "server", "org"] as const;
 const DEFAULT_SORT: SortState = { key: "name", dir: "asc" };
 
 /** Bounds the DOM only — the Cinc list call returns every cookbook at once. */
 const PAGE_SIZE = 50;
 
 /** Order two summaries by the active column; cookbooks with no version sort last. */
-function compareBy(a: CookbookSummary, b: CookbookSummary, sort: SortState): number {
+function compareBy(a: CookbookRow, b: CookbookRow, sort: SortState): number {
   switch (sort.key) {
     case "latest":
       return nullsLast<string>((x, y) => applyDir(compareVersions(x, y), sort.dir))(
@@ -36,9 +45,22 @@ function compareBy(a: CookbookSummary, b: CookbookSummary, sort: SortState): num
       );
     case "count":
       return applyDir(byNumber(a.count, b.count), sort.dir);
+    case "server":
+      return applyDir(byString(a.server ?? "", b.server ?? ""), sort.dir);
+    case "org":
+      return applyDir(byString(a.org ?? "", b.org ?? ""), sort.dir);
     default:
       return applyDir(byString(a.name, b.name), sort.dir);
   }
+}
+
+function matches(row: CookbookRow, needle: string): boolean {
+  if (needle === "") return true;
+  return (
+    row.name.toLowerCase().includes(needle) ||
+    (row.server?.toLowerCase().includes(needle) ?? false) ||
+    (row.org?.toLowerCase().includes(needle) ?? false)
+  );
 }
 
 /**
@@ -46,22 +68,15 @@ function compareBy(a: CookbookSummary, b: CookbookSummary, sort: SortState): num
  * version, or number of versions. Unlike the shared {@link ResourceTable} this
  * carries extra columns, so — like the members page — it is its own component.
  */
-export function CookbooksTable({
-  basePath,
-  cookbooks,
-}: {
-  basePath: string;
-  cookbooks: CookbookSummary[];
-}) {
+export function CookbooksTable({ cookbooks }: { cookbooks: CookbookRow[] }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const { sort, setSort } = useSort("sort", DEFAULT_SORT, SORT_KEYS);
+  const showScopeColumns = cookbooks.some((c) => c.server !== undefined || c.org !== undefined);
 
   const filtered = useMemo(() => {
     const needle = q.toLowerCase();
-    return cookbooks
-      .filter((c) => c.name.toLowerCase().includes(needle))
-      .sort((a, b) => compareBy(a, b, sort));
+    return cookbooks.filter((c) => matches(c, needle)).sort((a, b) => compareBy(a, b, sort));
   }, [cookbooks, q, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -118,6 +133,7 @@ export function CookbooksTable({
           <table className="w-full text-sm">
             <caption className="sr-only">
               Cookbooks, sortable by name, latest version, and version count
+              {showScopeColumns ? ", server, and organization" : ""}
             </caption>
             <thead>
               <tr className="border-b border-border text-left text-muted">
@@ -134,17 +150,23 @@ export function CookbooksTable({
                   sort={sort}
                   onSort={setSort}
                 />
+                {showScopeColumns && (
+                  <>
+                    <SortableTh label="Server" sortKey="server" sort={sort} onSort={setSort} />
+                    <SortableTh label="Org" sortKey="org" sort={sort} onSort={setSort} />
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {visible.map((c) => (
                 <tr
-                  key={c.name}
+                  key={showScopeColumns ? `${c.server}/${c.org}/${c.name}` : c.name}
                   className="border-b border-border last:border-0 hover:bg-surface-2"
                 >
                   <td className="p-0">
                     <Link
-                      href={`${basePath}/${encodeURIComponent(c.name)}`}
+                      href={c.href}
                       className="block px-4 py-2.5 font-mono text-sm text-text transition-colors hover:text-link"
                     >
                       <span className="truncate">{c.name}</span>
@@ -154,6 +176,12 @@ export function CookbooksTable({
                     {c.latest ?? "—"}
                   </td>
                   <td className="px-4 py-2.5 tabular-nums text-text">{c.count}</td>
+                  {showScopeColumns && (
+                    <>
+                      <td className="px-4 py-2.5 text-muted">{c.server}</td>
+                      <td className="px-4 py-2.5 text-muted">{c.org}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

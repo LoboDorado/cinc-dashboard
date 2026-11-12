@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ORG, SERVER, VIEWER, alert, login, orgPath } from "./helpers";
+import { ORG, VIEWER, login } from "./helpers";
 
 // e2e-viewer holds org_viewer on just this org: read allowed, write denied.
 // Unlike the pre-RBAC model, this denial is the dashboard's own role-grant
@@ -9,19 +9,20 @@ import { ORG, SERVER, VIEWER, alert, login, orgPath } from "./helpers";
 // regardless of which dashboard account is signed in.
 test("a viewer without write access sees the forbidden message", async ({ page }) => {
   await login(page, VIEWER);
-  // e2e-viewer has a grant on a single org, so login skips the picker.
-  await expect(page).toHaveURL(new RegExp(`/servers/${SERVER}/orgs/${ORG}$`));
+  // Everyone lands on the aggregated dashboard now, regardless of how many
+  // servers/orgs they can reach -- there's no picker to skip any more.
+  await expect(page).toHaveURL(/\/$/);
 
   // Reads are allowed...
-  await page.goto(orgPath("clients"));
+  await page.goto("/clients");
   await expect(page.getByRole("link", { name: `${ORG}-validator` })).toBeVisible();
 
-  // ...the create is not.
-  await page.goto(orgPath("clients", "new"));
-  await page.getByLabel("Name").fill(`e2e-denied-${Date.now()}`);
-  await page.getByRole("button", { name: "Create client" }).click();
+  // ...the create is not. With zero write-eligible scopes,
+  // requireObjectAccessMany(..., "write") filters this account out before a
+  // create form ever renders, rather than letting it reach a form that would
+  // only fail on submit.
+  await page.goto("/clients/new");
   await expect(
-    alert(page, "You don't have permission to create clients in this organization."),
+    page.getByText("You don't have permission to create a client anywhere."),
   ).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`${orgPath("clients", "new")}$`));
 });

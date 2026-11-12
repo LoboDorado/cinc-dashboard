@@ -21,12 +21,14 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => nav.getSearch(),
 }));
 
-import { ResourceTable } from "./resource-table";
+import { ResourceTable, type ResourceRow } from "./resource-table";
 
 // The row links carry a decorative aria-hidden "→"; the accessible name is just
 // the object name, which is what we sort on.
 const linkNames = () =>
   screen.getAllByRole("link").map((l) => l.textContent?.replace("→", "").trim());
+
+const rowsOf = (names: string[]): ResourceRow[] => names.map((name) => ({ name, href: `/b/${name}` }));
 
 describe("ResourceTable sorting", () => {
   beforeEach(() => {
@@ -35,7 +37,7 @@ describe("ResourceTable sorting", () => {
   });
 
   it("defaults to ascending by name", () => {
-    render(<ResourceTable title="Nodes" names={["gamma", "alpha", "beta"]} basePath="/b" />);
+    render(<ResourceTable title="Nodes" rows={rowsOf(["gamma", "alpha", "beta"])} />);
     expect(linkNames()).toEqual([
       "alpha",
       "beta",
@@ -45,7 +47,7 @@ describe("ResourceTable sorting", () => {
 
   it("honors a descending sort from the URL", () => {
     nav.setSearch("sort=name.desc");
-    render(<ResourceTable title="Nodes" names={["gamma", "alpha", "beta"]} basePath="/b" />);
+    render(<ResourceTable title="Nodes" rows={rowsOf(["gamma", "alpha", "beta"])} />);
     expect(linkNames()).toEqual([
       "gamma",
       "beta",
@@ -55,7 +57,7 @@ describe("ResourceTable sorting", () => {
 
   it("writes the flipped direction to the URL when toggled from the default", async () => {
     const user = userEvent.setup();
-    render(<ResourceTable title="Nodes" names={["a", "b"]} basePath="/b" />);
+    render(<ResourceTable title="Nodes" rows={rowsOf(["a", "b"])} />);
     await user.click(screen.getByRole("button", { name: "Name" }));
     expect(nav.replace).toHaveBeenCalledWith(
       "/orgs/acme/nodes?sort=name.desc",
@@ -66,10 +68,27 @@ describe("ResourceTable sorting", () => {
   it("drops the param when toggled back to the default sort", async () => {
     nav.setSearch("sort=name.desc");
     const user = userEvent.setup();
-    render(<ResourceTable title="Nodes" names={["a", "b"]} basePath="/b" />);
+    render(<ResourceTable title="Nodes" rows={rowsOf(["a", "b"])} />);
     await user.click(screen.getByRole("button", { name: "Name" }));
     // name.asc is the default, so the URL should clean up to no query string.
     expect(nav.replace).toHaveBeenCalledWith("/orgs/acme/nodes", {
+      scroll: false,
+    });
+  });
+
+  it("sorts ascending by server when the Server column is toggled", async () => {
+    const user = userEvent.setup();
+    render(
+      <ResourceTable
+        title="Roles"
+        rows={[
+          { name: "web", href: "/s2/web", server: "Server Two", org: "widgets" },
+          { name: "web", href: "/s1/web", server: "Server One", org: "acme" },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /server/i }));
+    expect(nav.replace).toHaveBeenCalledWith("/orgs/acme/nodes?sort=server.asc", {
       scroll: false,
     });
   });

@@ -4,6 +4,7 @@ import { clients } from "@/lib/cinc/readonly";
 import { safeGet, explainRead } from "@/lib/cinc/safe-get";
 import { ObjectEditor } from "@/components/object-editor";
 import { ClientDetails } from "@/components/details/client-details";
+import { listPath } from "@/lib/urls";
 import { deleteClientAction } from "../actions";
 
 export default async function ClientDetail({
@@ -26,7 +27,7 @@ export default async function ClientDetail({
       name={name}
       initialJson={JSON.stringify(res.data, null, 2)}
       details={<ClientDetails data={res.data} />}
-      backHref={`/servers/${server}/orgs/${org}/clients`}
+      backHref={listPath("clients")}
       readOnly={true}
       onDelete={deleteClientAction.bind(null, server, org, name)}
     />

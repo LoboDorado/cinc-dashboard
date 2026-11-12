@@ -36,9 +36,15 @@ describe("MobileNav", () => {
       "aria-current",
       "page",
     );
+    // A standalone (already-migrated) section links to its aggregated,
+    // scope-free route instead of the current org.
+    expect(within(links).getByRole("link", { name: "Data Bags" })).toHaveAttribute(
+      "href",
+      "/data_bags",
+    );
     expect(within(links).getByRole("link", { name: "Clients" })).toHaveAttribute(
       "href",
-      "/servers/s1/orgs/acme/clients",
+      "/clients",
     );
     expect(within(drawer).getByRole("link", { name: "Tim Smith" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "Sign out" })).toBeInTheDocument();

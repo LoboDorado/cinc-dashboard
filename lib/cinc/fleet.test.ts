@@ -235,6 +235,11 @@ describe("buildSnapshot", () => {
     expect(fresh.clientStatus).toBe("unknown");
   });
 
+  it("carries policyGroup through onto the summary, for the Nodes-list facet filter", () => {
+    const snap = buildSnapshot([node({ name: "web1", policyGroup: "canary" })], NOW, LIFECYCLE);
+    expect(snap.nodes[0].policyGroup).toBe("canary");
+  });
+
   it("carries independent diagnostic flags so a tile filter matches its count", () => {
     // A never-converged node is BOTH missing and unconfigured. The badge is
     // single-valued (missing wins), but the per-node flags must mirror the stat
@@ -286,5 +291,33 @@ describe("buildSnapshot", () => {
     expect(c.platform).toBe("ubuntu");
     expect(c.platformVersion).toBe("24.04");
     expect(c.recent).toBe(true);
+  });
+
+  it("carries an opaque tag through onto the matching NodeSummary, inert to classification", () => {
+    const tagA = { serverId: "s1", org: "acme" };
+    const tagB = { serverId: "s2", org: "widgets" };
+    const tagged = buildSnapshot(
+      [node({ name: "a", tag: tagA }), node({ name: "b", tag: tagB })],
+      NOW,
+      LIFECYCLE,
+    );
+    const untagged = buildSnapshot(
+      [node({ name: "a" }), node({ name: "b" })],
+      NOW,
+      LIFECYCLE,
+    );
+
+    expect(tagged.nodes.find((n) => n.name === "a")?.tag).toBe(tagA);
+    expect(tagged.nodes.find((n) => n.name === "b")?.tag).toBe(tagB);
+    // Stripping `tag` from every node leaves identical stats and per-node
+    // classification -- it has zero effect on anything buildSnapshot computes.
+    const stripTags = (nodes: typeof tagged.nodes) =>
+      nodes.map((n) => {
+        const copy = { ...n };
+        delete copy.tag;
+        return copy;
+      });
+    expect(tagged.stats).toEqual(untagged.stats);
+    expect(stripTags(tagged.nodes)).toEqual(stripTags(untagged.nodes));
   });
 });

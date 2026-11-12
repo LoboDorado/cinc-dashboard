@@ -32,7 +32,7 @@ test("deletes a single revision and revalidates", async () => {
   ).resolves.toEqual({ ok: true });
   expect(requireObjectAccess).toHaveBeenCalledWith("acct-1", "s1", "acme", "policies", "write");
   expect(deletePolicyRevision).toHaveBeenCalledWith("ctx", "web-app", "1.0.0");
-  expect(revalidatePath).toHaveBeenCalledWith("/servers/s1/orgs/acme/policies", "layout");
+  expect(revalidatePath).toHaveBeenCalledWith("/policies", "layout");
 });
 
 test("deletes the whole policy", async () => {

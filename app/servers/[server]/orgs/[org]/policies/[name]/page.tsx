@@ -7,6 +7,7 @@ import { ObjectEditor } from "@/components/object-editor";
 import { PolicyRevisions } from "@/components/details/policy-revisions";
 import { DetailSection } from "@/components/details/primitives";
 import { AttributeTree } from "@/components/details/attribute-tree";
+import { listPath } from "@/lib/urls";
 import { deletePolicyAction, deletePolicyRevisionAction } from "../actions";
 
 export default async function PolicyDetail({
@@ -25,7 +26,6 @@ export default async function PolicyDetail({
     return <p className="text-sm text-danger">{explainRead(res.error)}</p>;
   }
   const revisions = parsePolicyRevisions(res.data);
-  const base = `/servers/${server}/orgs/${org}/policies`;
   return (
     <ObjectEditor
       name={name}
@@ -33,7 +33,7 @@ export default async function PolicyDetail({
       details={
         <div className="space-y-4">
           <PolicyRevisions
-            listHref={base}
+            listHref={listPath("policies")}
             name={name}
             revisions={revisions}
             onDeleteRevision={deletePolicyRevisionAction.bind(null, server, org, name)}
@@ -44,7 +44,7 @@ export default async function PolicyDetail({
           </DetailSection>
         </div>
       }
-      backHref={base}
+      backHref={listPath("policies")}
       readOnly={true}
     />
   );

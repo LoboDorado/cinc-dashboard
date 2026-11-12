@@ -38,14 +38,15 @@ test("filters as you type and navigates on Enter", async () => {
   expect(screen.getByRole("option", { name: /Roles/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /Nodes/ })).not.toBeInTheDocument();
   await userEvent.keyboard("{Enter}");
-  expect(push).toHaveBeenCalledWith("/servers/s1/orgs/acme/roles");
+  // Roles has moved to an aggregated, scope-free list — not under this org.
+  expect(push).toHaveBeenCalledWith("/roles");
 });
 
 test("arrow keys move the active option and Enter runs it", async () => {
   render(<CommandPalette server="s1" org="acme" orgs={orgs} />);
   await userEvent.click(screen.getByRole("button", { name: /command palette/i }));
   await userEvent.keyboard("{ArrowDown}{Enter}"); // first -> second section = Roles
-  expect(push).toHaveBeenCalledWith("/servers/s1/orgs/acme/roles");
+  expect(push).toHaveBeenCalledWith("/roles");
 });
 
 test("jumps to an object by name once you type", async () => {

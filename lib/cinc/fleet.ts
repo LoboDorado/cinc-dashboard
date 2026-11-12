@@ -19,6 +19,14 @@ export type FleetNode = {
   /** automatic.platform / platform_version from ohai; null before the first run. */
   platform: string | null;
   platformVersion: string | null;
+  /**
+   * Opaque passthrough -- classification never reads this. Lets a caller that
+   * tags nodes before classifying (the cross-server/org dashboard aggregator)
+   * recover which node is which after buildSnapshot's internal sort, without
+   * fleet.ts knowing anything about servers or orgs. Always undefined for a
+   * single-scope caller.
+   */
+  tag?: unknown;
 };
 
 export type NodeStatus = "ok" | "missing" | "unconfigured";
@@ -69,6 +77,9 @@ export type NodeSummary = {
   environment: string | null;
   platform: string | null;
   platformVersion: string | null;
+  policyGroup: string | null;
+  /** Carries the matching FleetNode's `tag` through classification, untouched. */
+  tag?: unknown;
 };
 
 export type FleetStats = {
@@ -331,6 +342,8 @@ export function buildSnapshot(
       environment: n.environment,
       platform: n.platform,
       platformVersion: n.platformVersion,
+      policyGroup: n.policyGroup,
+      tag: n.tag,
     }))
     .sort((a, b) => (b.lastCheckIn ?? 0) - (a.lastCheckIn ?? 0));
 

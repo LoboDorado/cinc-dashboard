@@ -64,10 +64,17 @@ test("deleteNode removes by name", async () => {
   expect(remove).toHaveBeenCalledWith("ctx", "web01");
 });
 
-test("deleteNode revalidates the nodes list so the deleted node disappears", async () => {
+test("deleteNode revalidates the aggregated nodes list so the deleted node disappears", async () => {
   remove.mockResolvedValueOnce({});
   await deleteNode("s1", "acme", "web01");
-  expect(revalidatePath).toHaveBeenCalledWith("/servers/s1/orgs/acme/nodes", "layout");
+  expect(revalidatePath).toHaveBeenCalledWith("/nodes", "layout");
+});
+
+test("saveNode revalidates both the aggregated list and the concrete detail page", async () => {
+  update.mockResolvedValueOnce({});
+  await saveNode("s1", "acme", "web01", '{"name":"web01"}');
+  expect(revalidatePath).toHaveBeenCalledWith("/nodes", "layout");
+  expect(revalidatePath).toHaveBeenCalledWith("/servers/s1/orgs/acme/nodes/web01", "layout");
 });
 
 test("a failed mutation does not revalidate", async () => {

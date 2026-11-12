@@ -3,7 +3,7 @@
 // no requests are made to a registered Collector yet (see CLAUDE.md).
 import "server-only";
 import { getPool } from "../db/client";
-import { encrypt } from "../db/secretbox";
+import { encrypt, decrypt } from "../db/secretbox";
 import { recordAudit } from "../db/audit";
 
 export type RegisteredCollectorSummary = {
@@ -71,6 +71,50 @@ export async function getRegisteredCollector(id: string): Promise<RegisteredColl
     [id],
   );
   return rows[0] ? toSummary(rows[0]) : null;
+}
+
+export type DecryptedCollector = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  bearerToken: string;
+  caCert?: string;
+  tlsNoVerify: boolean;
+};
+
+type DecryptableCollectorRow = {
+  id: string;
+  name: string;
+  base_url: string;
+  bearer_token_encrypted: Buffer;
+  ca_cert: string | null;
+  tls_no_verify: boolean;
+};
+
+/**
+ * Reverse lookup of listRegisteredCollectors/getRegisteredCollector: every
+ * collector linked to `serverId`, with its bearer token (and CA cert, if any)
+ * already decrypted -- callers are about to make a live HTTP call, not
+ * render an admin summary, so there is no reason to hand back ciphertext.
+ * No access check here (pure storage read, like loadServer in
+ * lib/admin/access.ts) -- the caller's own requireObjectAccess call is the gate.
+ */
+export async function getCollectorsForServer(serverId: string): Promise<DecryptedCollector[]> {
+  const { rows } = await getPool().query<DecryptableCollectorRow>(
+    `SELECT c.id, c.name, c.base_url, c.bearer_token_encrypted, c.ca_cert, c.tls_no_verify
+       FROM registered_collectors c
+       JOIN registered_collector_servers cs ON cs.collector_id = c.id
+      WHERE cs.server_id = $1`,
+    [serverId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    baseUrl: r.base_url,
+    bearerToken: decrypt(r.bearer_token_encrypted),
+    caCert: r.ca_cert ?? undefined,
+    tlsNoVerify: r.tls_no_verify,
+  }));
 }
 
 async function setLinkedServers(

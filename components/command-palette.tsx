@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Org } from "@/lib/cinc/orgs";
 import { NAV } from "@/lib/nav";
+import { listPath } from "@/lib/urls";
 import { IconSearch } from "@/components/ui/icons";
 import { searchOrgObjects, type PaletteObject } from "@/lib/palette-search";
 
@@ -49,7 +50,7 @@ export function CommandPalette({
       id: `nav-${n.slug}`,
       label: n.label,
       hint: "Section",
-      href: `/servers/${server}/orgs/${org}/${n.slug}`,
+      href: n.standalone ? listPath(n.slug) : `/servers/${server}/orgs/${org}/${n.slug}`,
     }));
     const orgCmds: Command[] = orgs
       .filter((o) => o.name !== org)

@@ -14,15 +14,17 @@ export type ActionResult = { ok: true } | { error: string };
  *
  * On success, `revalidate` invalidates that route subtree (as a layout, so both
  * the list and its detail pages refresh) — without it a deleted object lingers
- * in a cached list and `router.refresh()` alone races the navigation.
+ * in a cached list and `router.refresh()` alone races the navigation. Takes an
+ * array since the aggregated list and a per-scope detail page now live in
+ * different route subtrees and both need invalidating.
  */
 export async function runAction(
   fn: () => Promise<unknown>,
-  opts: { revalidate?: string } = {},
+  opts: { revalidate?: string | string[] } = {},
 ): Promise<ActionResult> {
   try {
     await fn();
-    if (opts.revalidate) revalidatePath(opts.revalidate, "layout");
+    for (const p of [opts.revalidate ?? []].flat()) revalidatePath(p, "layout");
     return { ok: true };
   } catch (e) {
     // A role-grant denial (lib/admin/access.ts) or a delegation-cap denial

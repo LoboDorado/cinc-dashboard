@@ -6,6 +6,7 @@ import { requireObjectAccess, AccessDeniedError } from "@/lib/admin/access";
 import { createClient, deleteClient } from "@/lib/cinc/clients";
 import { runAction, type ActionResult } from "@/lib/cinc/action";
 import { isCincError } from "@/lib/cinc/errors";
+import { listPath } from "@/lib/urls";
 
 export type CreateClientResult =
   | { ok: true; privateKey: string }
@@ -24,7 +25,7 @@ export async function createClientAction(
   try {
     const ctx = await requireObjectAccess(accountId, server, org, "clients", "write");
     const { privateKey } = await createClient(ctx, name);
-    revalidatePath(`/servers/${server}/orgs/${org}/clients`, "layout");
+    revalidatePath(listPath("clients"), "layout");
     return { ok: true, privateKey };
   } catch (e) {
     if (e instanceof AccessDeniedError) return { error: "forbidden" };
@@ -48,6 +49,6 @@ export async function deleteClientAction(
       const ctx = await requireObjectAccess(accountId, server, org, "clients", "write");
       return deleteClient(ctx, name);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/clients` },
+    { revalidate: listPath("clients") },
   );
 }

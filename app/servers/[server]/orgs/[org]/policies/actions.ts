@@ -4,6 +4,7 @@ import { currentAccountId } from "@/lib/guard";
 import { requireObjectAccess } from "@/lib/admin/access";
 import { deletePolicy, deletePolicyRevision } from "@/lib/cinc/policies";
 import { runAction, type ActionResult } from "@/lib/cinc/action";
+import { listPath } from "@/lib/urls";
 
 export async function deletePolicyRevisionAction(
   server: string,
@@ -17,7 +18,7 @@ export async function deletePolicyRevisionAction(
       const ctx = await requireObjectAccess(accountId, server, org, "policies", "write");
       return deletePolicyRevision(ctx, name, revision);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/policies` },
+    { revalidate: listPath("policies") },
   );
 }
 
@@ -32,6 +33,6 @@ export async function deletePolicyAction(
       const ctx = await requireObjectAccess(accountId, server, org, "policies", "write");
       return deletePolicy(ctx, name);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/policies` },
+    { revalidate: listPath("policies") },
   );
 }

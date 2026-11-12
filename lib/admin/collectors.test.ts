@@ -15,7 +15,9 @@ import {
   updateRegisteredCollector,
   deleteRegisteredCollector,
   listRegisteredCollectors,
+  getCollectorsForServer,
 } from "./collectors";
+import { encrypt } from "../db/secretbox";
 
 beforeEach(() => {
   query.mockReset();
@@ -138,4 +140,36 @@ test("deleteRegisteredCollector deletes by id", async () => {
   query.mockResolvedValueOnce({ rows: [] });
   await deleteRegisteredCollector("c1");
   expect(query).toHaveBeenCalledWith("DELETE FROM registered_collectors WHERE id = $1", ["c1"]);
+});
+
+test("getCollectorsForServer decrypts the bearer token (and CA cert) of every linked collector", async () => {
+  query.mockResolvedValueOnce({
+    rows: [
+      {
+        id: "c1",
+        name: "Collector A",
+        base_url: "https://collector.example.com",
+        bearer_token_encrypted: encrypt("secret-token"),
+        ca_cert: "-----BEGIN CERTIFICATE-----",
+        tls_no_verify: false,
+      },
+    ],
+  });
+  const result = await getCollectorsForServer("s1");
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("WHERE cs.server_id = $1"), ["s1"]);
+  expect(result).toEqual([
+    {
+      id: "c1",
+      name: "Collector A",
+      baseUrl: "https://collector.example.com",
+      bearerToken: "secret-token",
+      caCert: "-----BEGIN CERTIFICATE-----",
+      tlsNoVerify: false,
+    },
+  ]);
+});
+
+test("getCollectorsForServer returns an empty array when no collector is linked", async () => {
+  query.mockResolvedValueOnce({ rows: [] });
+  expect(await getCollectorsForServer("s-unlinked")).toEqual([]);
 });

@@ -4,8 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { Org } from "@/lib/cinc/orgs";
-import { OrgSwitcher } from "@/components/org-switcher";
-import { ServerSwitcher, type ReachableServer } from "@/components/server-switcher";
 import { UserMenu } from "@/components/user-menu";
 import { CommandPalette } from "@/components/command-palette";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -15,7 +13,7 @@ import { MobileNav } from "@/components/mobile-nav";
 
 export function AppShell({
   server,
-  servers,
+  serverName,
   org,
   orgs,
   displayName,
@@ -25,8 +23,10 @@ export function AppShell({
   children,
 }: {
   server: string;
-  servers: ReachableServer[];
+  /** Display label for the breadcrumb's leading crumb -- see Breadcrumbs. */
+  serverName: string;
   org: string;
+  /** Still needed by CommandPalette's "switch org" commands and object search. */
   orgs: Org[];
   displayName: string;
   isPlatformMember?: boolean;
@@ -54,7 +54,7 @@ export function AppShell({
             canManageRoles={canManageRoles}
           />
           <Link
-            href={`/servers/${server}/orgs`}
+            href="/"
             className="flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight"
           >
             <Image
@@ -67,8 +67,6 @@ export function AppShell({
             />
             <span className="hidden text-text min-[400px]:inline">dashboard</span>
           </Link>
-          <ServerSwitcher servers={servers} />
-          <OrgSwitcher orgs={orgs} />
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <CommandPalette server={server} org={org} orgs={orgs} />
@@ -91,7 +89,7 @@ export function AppShell({
 
         <main id="main-content" tabIndex={-1} className="flex-1 p-4 md:p-6">
           <div className="mx-auto w-full max-w-[1600px]">
-            <Breadcrumbs />
+            <Breadcrumbs serverName={serverName} />
             {children}
           </div>
         </main>

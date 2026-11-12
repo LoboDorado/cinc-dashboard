@@ -11,8 +11,13 @@ test("an admin creates, edits, and deletes a node", async ({ page }) => {
   await login(page, ADMIN);
 
   // Create
-  await page.goto(orgPath("nodes"));
+  await page.goto("/nodes");
   await page.getByRole("link", { name: "New" }).click();
+  // e2e-admin (platform_admin) reaches more than one org, so the aggregated
+  // create form shows a scope picker before the form itself appears.
+  await page
+    .getByLabel("Server and organization to create in")
+    .selectOption({ label: "default / acme" });
   await expect(page.getByRole("heading", { name: "New node" })).toBeVisible();
   await page.getByLabel("Name").fill(name);
   await page.getByRole("button", { name: "Create" }).click();
@@ -44,7 +49,9 @@ test("an admin creates, edits, and deletes a node", async ({ page }) => {
   const dialog = page.getByRole("dialog", { name: `Delete ${name}?` });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Delete" }).click();
-  await expect(page).toHaveURL(new RegExp(`${orgPath("nodes")}$`));
+  // Deleting redirects to the aggregated list, not the (now-removed) per-org
+  // one -- see listPath("nodes") in the node detail page's backHref.
+  await expect(page).toHaveURL(/\/nodes$/);
   await expect(page.getByRole("link", { name: "seed-web01" })).toBeVisible();
   await expect(page.getByRole("link", { name })).toHaveCount(0);
 
@@ -53,4 +60,48 @@ test("an admin creates, edits, and deletes a node", async ({ page }) => {
   await expect(
     page.getByText("This no longer exists, or you don't have access to it."),
   ).toBeVisible();
+});
+
+// No collector is registered against the e2e fixture server, so this
+// exercises the real degrade path: the facets sourced straight from the Cinc
+// Server (Environment) still work with zero collector involvement, while the
+// collector-sourced one (Converge status) still renders -- as "All" plus
+// "(unknown)", not a blank/disabled control -- since every node is `undefined`
+// (no collector covers it at all), which the table deliberately folds into
+// the same "(unknown)" bucket a collector-covered-but-unreported node would
+// also land in.
+test("the Nodes list facets filter correctly and degrade without a collector", async ({ page }) => {
+  await login(page, ADMIN);
+  await page.goto("/nodes");
+
+  await expect(page.getByLabel("Platform")).toHaveText("All Platform");
+  await expect(page.getByLabel("Policy group")).toHaveText("All Policy group");
+
+  await page.getByLabel("Environment").selectOption({ label: "_default" });
+  await expect(page.getByRole("link", { name: "seed-web01" })).toBeVisible();
+
+  const ccrStatus = page.getByLabel("Converge status");
+  await expect(ccrStatus.locator("option")).toHaveText(["All Converge status", "(unknown)"]);
+  await ccrStatus.selectOption({ label: "(unknown)" });
+  await expect(page.getByRole("link", { name: "seed-web01" })).toBeVisible();
+});
+
+test("the node detail page's Compliance tab is keyboard-reachable and shows the no-collector CTA", async ({
+  page,
+}) => {
+  await login(page, ADMIN);
+  await page.goto(orgPath("nodes", "seed-web01"));
+
+  const detailsTab = page.getByRole("tab", { name: "Details" });
+  await detailsTab.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Compliance", selected: true })).toBeVisible();
+
+  await expect(
+    page.getByText("No collector is registered for this server yet."),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Register a collector" })).toHaveAttribute(
+    "href",
+    "/admin/collectors/new",
+  );
 });

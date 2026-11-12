@@ -4,6 +4,7 @@ import { makeResource } from "@/lib/cinc/resource";
 import { safeGet, explainRead } from "@/lib/cinc/safe-get";
 import { ObjectEditor } from "@/components/object-editor";
 import { RoleDetails } from "@/components/details/role-details";
+import { listPath } from "@/lib/urls";
 import { saveRole, deleteRole, createRole } from "../actions";
 
 const roles = makeResource("roles");
@@ -35,7 +36,8 @@ export default async function RoleDetail({
           onSaveOverview={saveRole.bind(null, server, org, name)}
         />
       }
-      backHref={base}
+      backHref={listPath("roles")}
+      duplicateBasePath={base}
       onSave={saveRole.bind(null, server, org, name)}
       onDelete={deleteRole.bind(null, server, org, name)}
       onDuplicate={createRole.bind(null, server, org)}

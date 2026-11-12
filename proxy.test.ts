@@ -58,13 +58,13 @@ test("authenticated user on /login is sent to a safe from target", async () => {
 
 test("an off-site from is ignored (no open redirect)", async () => {
   const res = await proxy(req("/login?from=//evil.com", { session: true }));
-  expect(new URL(location(res)!).pathname).toBe("/servers");
+  expect(new URL(location(res)!).pathname).toBe("/");
 });
 
 test("a backslash-prefixed from is ignored (browsers treat /\\ as //)", async () => {
   const res = await proxy(req("/login?from=/%5Cevil.com", { session: true }));
   expect(new URL(location(res)!).host).toBe("dashboard.test");
-  expect(new URL(location(res)!).pathname).toBe("/servers");
+  expect(new URL(location(res)!).pathname).toBe("/");
 });
 
 test("an authenticated request passes through", async () => {

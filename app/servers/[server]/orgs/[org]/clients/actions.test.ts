@@ -33,7 +33,7 @@ test("returns the one-time private key and revalidates the list", async () => {
   });
   expect(requireObjectAccess).toHaveBeenCalledWith("acct-1", "s1", "acme", "clients", "write");
   expect(createClient).toHaveBeenCalledWith("ctx", "ci");
-  expect(revalidatePath).toHaveBeenCalledWith("/servers/s1/orgs/acme/clients", "layout");
+  expect(revalidatePath).toHaveBeenCalledWith("/clients", "layout");
 });
 
 test("maps a name conflict to a friendly error and does not revalidate", async () => {
@@ -64,7 +64,7 @@ test("deleteClientAction removes the client and revalidates", async () => {
   deleteClient.mockResolvedValueOnce(undefined);
   await expect(deleteClientAction("s1", "acme", "ci")).resolves.toEqual({ ok: true });
   expect(deleteClient).toHaveBeenCalledWith("ctx", "ci");
-  expect(revalidatePath).toHaveBeenCalledWith("/servers/s1/orgs/acme/clients", "layout");
+  expect(revalidatePath).toHaveBeenCalledWith("/clients", "layout");
 });
 
 test("deleteClientAction maps 403 to forbidden", async () => {

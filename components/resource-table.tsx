@@ -9,46 +9,81 @@ import { SortableTh } from "./ui/sortable";
 import { useSort } from "./ui/use-sort";
 import { applyDir, byString, type SortState } from "@/lib/sort";
 
+/**
+ * One row. `server`/`org` are set only by an aggregated (cross-server/org)
+ * caller — when any row carries them, two extra sortable columns render.
+ * `href` is fully resolved by the caller (a single-scope page has one
+ * `basePath` prefix for every row; an aggregated page's rows each point at a
+ * different server/org, so there's no single prefix to share).
+ */
+export type ResourceRow = {
+  name: string;
+  href: string;
+  server?: string;
+  org?: string;
+  /**
+   * True for a row the server creates on its own (`_default`, the org
+   * validator). Computed by the caller (it knows the row's `name`/`org`) and
+   * carried as plain data rather than a predicate prop, since a function
+   * can't be passed from a Server Component page into this Client Component.
+   */
+  builtIn?: boolean;
+};
+
 /** Single-column lists sort by name only; direction is the user's to choose. */
-const SORT_KEYS = ["name"] as const;
+const SORT_KEYS = ["name", "server", "org"] as const;
 const DEFAULT_SORT: SortState = { key: "name", dir: "asc" };
 
 /** Rows rendered per page. The Cinc list call returns every name at once, so
  * this only bounds the DOM — it keeps large orgs (thousands of nodes) snappy. */
 const PAGE_SIZE = 50;
 
-/** A searchable, paginated list of object names that link to their detail pages. */
+function compareBy(a: ResourceRow, b: ResourceRow, sort: SortState): number {
+  switch (sort.key) {
+    case "server":
+      return applyDir(byString(a.server ?? "", b.server ?? ""), sort.dir);
+    case "org":
+      return applyDir(byString(a.org ?? "", b.org ?? ""), sort.dir);
+    default:
+      return applyDir(byString(a.name, b.name), sort.dir);
+  }
+}
+
+function matches(row: ResourceRow, needle: string): boolean {
+  if (needle === "") return true;
+  return (
+    row.name.toLowerCase().includes(needle) ||
+    (row.server?.toLowerCase().includes(needle) ?? false) ||
+    (row.org?.toLowerCase().includes(needle) ?? false)
+  );
+}
+
+/** A searchable, paginated list of objects that link to their detail pages. */
 export function ResourceTable({
   title,
-  names,
-  basePath,
+  rows,
   createHref,
   empty,
-  builtIn = [],
 }: {
   title: string;
-  names: string[];
-  basePath: string;
+  rows: ResourceRow[];
   createHref?: string;
-  /** The EmptyState shown when the org has none of this object yet. */
-  empty?: ReactNode;
   /**
-   * Names the server creates on its own (`_default`, the org validator). A
-   * list holding only these still counts as empty, so a new org gets the
-   * empty state rather than a one-row table; the page's `empty` should link
-   * to them so they stay reachable.
+   * The EmptyState shown when the org has none of this object yet. A list
+   * holding only `builtIn` rows still counts as empty, so a new org gets this
+   * instead of a one-row table; it should link to them so they stay reachable.
    */
-  builtIn?: string[];
+  empty?: ReactNode;
 }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const { sort, setSort } = useSort("sort", DEFAULT_SORT, SORT_KEYS);
+  const showScopeColumns = rows.some((r) => r.server !== undefined || r.org !== undefined);
+
   const filtered = useMemo(() => {
     const needle = q.toLowerCase();
-    return names
-      .filter((n) => n.toLowerCase().includes(needle))
-      .sort((a, b) => applyDir(byString(a, b), sort.dir));
-  }, [names, q, sort.dir]);
+    return rows.filter((r) => matches(r, needle)).sort((a, b) => compareBy(a, b, sort));
+  }, [rows, q, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Clamp during render so a shrinking filter can never strand us past the end.
@@ -63,7 +98,7 @@ export function ResourceTable({
 
   // The empty state carries its own call to action, so the header's "New"
   // button and the filter box (nothing to filter) are left out.
-  if (empty && names.every((n) => builtIn.includes(n))) {
+  if (empty && rows.every((r) => r.builtIn)) {
     return (
       <div className="space-y-4">
         <PageHeader title={title} />
@@ -92,8 +127,8 @@ export function ResourceTable({
         className="max-w-xs"
       />
 
-      <div className="overflow-hidden rounded-lg border border-border">
-        {names.length === 0 ? (
+      <div className="overflow-x-auto rounded-lg border border-border">
+        {rows.length === 0 ? (
           <div className="p-4 text-sm text-muted">
             <p>No {title.toLowerCase()} in this organization yet.</p>
             {createHref && (
@@ -111,7 +146,9 @@ export function ResourceTable({
           </p>
         ) : (
           <table className="w-full text-sm">
-            <caption className="sr-only">{title}, sortable by name</caption>
+            <caption className="sr-only">
+              {title}, sortable by name{showScopeColumns ? ", server, and organization" : ""}
+            </caption>
             <thead>
               <tr className="border-b border-border text-left text-muted">
                 <SortableTh
@@ -120,25 +157,47 @@ export function ResourceTable({
                   sort={sort}
                   onSort={setSort}
                 />
+                {showScopeColumns && (
+                  <>
+                    <SortableTh
+                      label="Server"
+                      sortKey="server"
+                      sort={sort}
+                      onSort={setSort}
+                    />
+                    <SortableTh
+                      label="Org"
+                      sortKey="org"
+                      sort={sort}
+                      onSort={setSort}
+                    />
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
-              {visible.map((name) => (
+              {visible.map((row) => (
                 <tr
-                  key={name}
+                  key={showScopeColumns ? `${row.server}/${row.org}/${row.name}` : row.name}
                   className="border-b border-border last:border-0 hover:bg-surface-2"
                 >
                   <td className="p-0">
                     <Link
-                      href={`${basePath}/${encodeURIComponent(name)}`}
+                      href={row.href}
                       className="flex items-center justify-between gap-2 px-4 py-2.5 font-mono text-sm text-text transition-colors hover:text-link"
                     >
-                      <span className="truncate">{name}</span>
+                      <span className="truncate">{row.name}</span>
                       <span aria-hidden="true" className="text-muted">
                         →
                       </span>
                     </Link>
                   </td>
+                  {showScopeColumns && (
+                    <>
+                      <td className="px-4 py-2.5 text-muted">{row.server}</td>
+                      <td className="px-4 py-2.5 text-muted">{row.org}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -149,9 +208,9 @@ export function ResourceTable({
       <div className="flex items-center justify-between text-xs text-muted">
         <span>
           {filtered.length === 0
-            ? `0 of ${names.length}`
+            ? `0 of ${rows.length}`
             : `${start + 1}–${start + visible.length} of ${filtered.length}` +
-              (filtered.length === names.length ? "" : ` (${names.length} total)`)}
+              (filtered.length === rows.length ? "" : ` (${rows.length} total)`)}
         </span>
         {pageCount > 1 && (
           <span className="flex items-center gap-2">

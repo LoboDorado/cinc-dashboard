@@ -9,6 +9,7 @@ import { getPool } from "../db/client";
 import { decrypt } from "../db/secretbox";
 import { recordAudit } from "../db/audit";
 import { listAllOrgs, type Org } from "../cinc/orgs";
+import { isCincError } from "../cinc/errors";
 import {
   canAccessObject,
   canAccessScope,
@@ -86,6 +87,18 @@ async function loadServer(serverId: string): Promise<ServerRow | null> {
     [serverId],
   );
   return rows[0] ?? null;
+}
+
+/** Batched sibling of `loadServer`, for minting many contexts at once without
+ *  one query per (server, org) pair -- several orgs commonly share one server. */
+async function loadServers(ids: readonly string[]): Promise<ServerRow[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await getPool().query<ServerRow>(
+    `SELECT id, name, base_url, ca_cert, webui_key_encrypted, impersonation_username, tls_no_verify
+     FROM registered_servers WHERE id = ANY($1)`,
+    [ids],
+  );
+  return rows;
 }
 
 type AccountRow = { id: string; username: string };
@@ -310,6 +323,19 @@ export async function requirePlatformAdmin(accountId: string): Promise<void> {
   throw new AccessDeniedError();
 }
 
+/**
+ * A server's display name only -- for a breadcrumb or header label, not an
+ * access decision. Deliberately narrower than `loadServer`: it never touches
+ * `webui_key_encrypted`, so there's nothing here to decrypt or leak.
+ */
+export async function getServerName(serverId: string): Promise<string | null> {
+  const { rows } = await getPool().query<{ name: string }>(
+    "SELECT name FROM registered_servers WHERE id = $1",
+    [serverId],
+  );
+  return rows[0]?.name ?? null;
+}
+
 /** Every registered server `accountId` can reach at all -- for the server picker. */
 export async function listReachableServers(
   accountId: string,
@@ -350,4 +376,136 @@ export async function listReachableOrgs(accountId: string, serverId: string): Pr
     grants.filter((g) => g.serverId === serverId && g.org !== null).map((g) => g.org as string),
   );
   return [...orgNames].sort().map((name) => ({ name }));
+}
+
+export type ReachableScope = { serverId: string; serverName: string; org: string };
+export type UnavailableServer = { serverId: string; serverName: string; reason: string };
+
+function explainUnavailable(e: unknown): string {
+  return isCincError(e) ? `server error (${e.status})` : "unreachable";
+}
+
+/**
+ * Every (server, org) pair `accountId` can read something in, across every
+ * registered server -- the single composition point every aggregated
+ * (cross-server/org) page uses. Degrades per server, same spirit as
+ * fetchFleetCounts's degrade-not-throw pattern: one unreachable server's orgs
+ * just can't be confirmed, which must not blank the whole aggregated view.
+ */
+export async function listReachableScopes(accountId: string): Promise<{
+  scopes: ReachableScope[];
+  unavailable: UnavailableServer[];
+}> {
+  const servers = await listReachableServers(accountId);
+  const settled = await Promise.all(
+    servers.map(async (s) => {
+      try {
+        return { server: s, orgs: await listReachableOrgs(accountId, s.id), error: null as string | null };
+      } catch (e) {
+        return { server: s, orgs: [] as Org[], error: explainUnavailable(e) };
+      }
+    }),
+  );
+  const scopes: ReachableScope[] = [];
+  const unavailable: UnavailableServer[] = [];
+  for (const r of settled) {
+    if (r.error !== null) {
+      unavailable.push({ serverId: r.server.id, serverName: r.server.name, reason: r.error });
+    } else {
+      for (const o of r.orgs) scopes.push({ serverId: r.server.id, serverName: r.server.name, org: o.name });
+    }
+  }
+  return { scopes, unavailable };
+}
+
+export type ManyContextsResult = {
+  contexts: Array<{ serverId: string; org: string; ctx: AuthorizedActionContext }>;
+  /**
+   * Pairs that didn't pass the scope/object check -- expected to be empty for
+   * "read" when `pairs` came straight from `listReachableScopes`, but normal
+   * for "write" (e.g. a viewer-only org offering nothing to a create-form
+   * picker). Deliberately NOT audited: this is bulk authorization-aware
+   * filtering ("what should I even show"), the same no-audit precedent as
+   * `canAccessScope`/`listReachableOrgs` -- not an attempted action against a
+   * server. Every actual Cinc HTTP call made with a returned context still
+   * goes through `cincRequest`, which unconditionally audits it.
+   */
+  denied: Array<{ serverId: string; org: string }>;
+};
+
+/**
+ * Shared minting loop for `requireObjectAccessMany`/`requireOrgAccessMany`:
+ * loads grants and the account ONCE, loads only the DISTINCT `registered_servers`
+ * rows the given pairs touch (several orgs often share one server), and
+ * decrypts each server's webui key at most once rather than once per org.
+ */
+async function mintContextsMany(
+  accountId: string,
+  pairs: ReadonlyArray<{ serverId: string; org: string }>,
+  allowed: (grants: RoleGrant[], serverId: string, org: string) => boolean,
+): Promise<ManyContextsResult> {
+  if (pairs.length === 0) return { contexts: [], denied: [] };
+
+  const distinctIds = [...new Set(pairs.map((p) => p.serverId))];
+  const [grants, account, servers] = await Promise.all([
+    loadGrants(accountId),
+    loadAccount(accountId),
+    loadServers(distinctIds),
+  ]);
+  if (account === null) {
+    return { contexts: [], denied: pairs.map(({ serverId, org }) => ({ serverId, org })) };
+  }
+
+  const serverById = new Map(servers.map((s) => [s.id, s]));
+  const decryptedById = new Map<string, string>();
+  const contexts: ManyContextsResult["contexts"] = [];
+  const denied: ManyContextsResult["denied"] = [];
+
+  for (const { serverId, org } of pairs) {
+    const server = serverById.get(serverId);
+    if (!server || !allowed(grants, serverId, org)) {
+      denied.push({ serverId, org });
+      continue;
+    }
+    if (!decryptedById.has(serverId)) {
+      decryptedById.set(serverId, decrypt(server.webui_key_encrypted));
+    }
+    contexts.push({
+      serverId,
+      org,
+      ctx: {
+        serverId: server.id,
+        serverUrl: server.base_url,
+        webuiKey: decryptedById.get(serverId)!,
+        caCert: server.ca_cert ?? undefined,
+        sslNoVerify: server.tls_no_verify,
+        impersonationUsername: server.impersonation_username,
+        accountId: account.id,
+        onBehalfOf: account.username,
+        org,
+        [brand]: true,
+      } as AuthorizedActionContext,
+    });
+  }
+  return { contexts, denied };
+}
+
+/** Batched sibling of `requireObjectAccess`, for aggregated list/create pages. */
+export async function requireObjectAccessMany(
+  accountId: string,
+  pairs: ReadonlyArray<{ serverId: string; org: string }>,
+  objectType: ObjectType,
+  action: Action,
+): Promise<ManyContextsResult> {
+  return mintContextsMany(accountId, pairs, (grants, serverId, org) =>
+    canAccessObject(grants, serverId, org, objectType, action),
+  );
+}
+
+/** Batched sibling of `requireOrgAccess`, for the aggregated Members directory. */
+export async function requireOrgAccessMany(
+  accountId: string,
+  pairs: ReadonlyArray<{ serverId: string; org: string }>,
+): Promise<ManyContextsResult> {
+  return mintContextsMany(accountId, pairs, (grants, serverId, org) => canAccessScope(grants, serverId, org));
 }

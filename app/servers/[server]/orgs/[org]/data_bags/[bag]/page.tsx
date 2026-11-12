@@ -27,6 +27,7 @@ export default async function DataBagItemsPage({
     return <p className="text-sm text-danger">{explainRead(res.error)}</p>;
   }
   const items = Object.keys(res.data);
+  const rows = items.map((name) => ({ name, href: `${base}/${encodeURIComponent(name)}` }));
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -46,8 +47,7 @@ export default async function DataBagItemsPage({
       </div>
       <ResourceTable
         title={bag}
-        names={items}
-        basePath={base}
+        rows={rows}
         createHref={`${base}/new`}
         empty={
           <EmptyState

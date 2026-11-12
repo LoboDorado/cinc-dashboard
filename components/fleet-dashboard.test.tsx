@@ -9,7 +9,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import { FleetDashboard } from "./fleet-dashboard";
+import { FleetDashboard, type DashboardNode, type DashboardSnapshot } from "./fleet-dashboard";
 import { buildSnapshot, type FleetNode } from "@/lib/cinc/fleet";
 
 const NOW = 1_700_000_000_000;
@@ -32,7 +32,18 @@ function node(over: Partial<FleetNode>): FleetNode {
 
 const LIFECYCLE = { latestMajor: 19, latestVersion: "19.3.15", eolMajors: [17] };
 
-const snapshot = buildSnapshot(
+/** Mirrors the one-line change OrgDashboard/FullDashboard now makes: attach a
+ *  concrete href to every node before handing the snapshot to FleetDashboard. */
+function withHrefs(nodes: FleetNode[], server: string, org: string): DashboardSnapshot {
+  const raw = buildSnapshot(nodes, NOW, LIFECYCLE);
+  const rows: DashboardNode[] = raw.nodes.map((n) => ({
+    ...n,
+    href: `/servers/${server}/orgs/${org}/nodes/${encodeURIComponent(n.name)}`,
+  }));
+  return { ...raw, nodes: rows };
+}
+
+const snapshot = withHrefs(
   [
     node({ name: "web01" }),
     node({ name: "k8s-2", environment: "_default" }),
@@ -51,19 +62,21 @@ const snapshot = buildSnapshot(
       platformVersion: null,
     }),
   ],
-  NOW,
-  LIFECYCLE,
+  "s1",
+  "acme",
 );
 
 function renderDashboard() {
   return render(
-    <FleetDashboard server="s1" org="acme" initial={snapshot} initialError={null} />,
+    <FleetDashboard pollUrl="/servers/s1/orgs/acme/fleet" initial={snapshot} initialError={null} />,
   );
 }
 
 // Each node renders twice — a phone card list and the sm+ table — with CSS
-// showing one (jsdom applies no CSS), so scope queries to one layout.
-const table = () => within(screen.getByRole("table"));
+// showing one (jsdom applies no CSS), so scope queries to one layout. Matched
+// by its caption's accessible name since the aggregated "By organization"
+// breakdown renders a second, distinctly-captioned table.
+const table = () => within(screen.getByRole("table", { name: /Fleet nodes/ }));
 const cards = () => within(screen.getByRole("list", { name: "Fleet nodes" }));
 const rowFor = (name: string) =>
   table().getByRole("link", { name }).closest("tr") as HTMLElement;
@@ -92,6 +105,14 @@ describe("FleetDashboard", () => {
     expect(within(rowFor("nas01")).getByText("EOL client")).toBeInTheDocument();
     expect(within(rowFor("web01")).getByText("Healthy")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /Status/ })).toBeInTheDocument();
+  });
+
+  it("links each row to its own href", () => {
+    renderDashboard();
+    expect(table().getByRole("link", { name: "web01" })).toHaveAttribute(
+      "href",
+      "/servers/s1/orgs/acme/nodes/web01",
+    );
   });
 
   it("filters the list by the recent tile", async () => {
@@ -133,6 +154,95 @@ describe("FleetDashboard", () => {
 
   it("has no axe violations", async () => {
     const { container } = renderDashboard();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("FleetDashboard, aggregated across servers/orgs", () => {
+  const aggregatedNodes: FleetNode[] = [
+    node({ name: "web01", tag: { serverId: "s1", serverName: "Server One", org: "acme" } }),
+    node({
+      name: "db01",
+      ohaiTime: (NOW - 72 * HOUR) / 1000,
+      chefVersion: "17.10.0",
+      tag: { serverId: "s2", serverName: "Server Two", org: "widgets" },
+    }),
+  ];
+
+  function aggregatedSnapshot(): DashboardSnapshot {
+    const raw = buildSnapshot(aggregatedNodes, NOW, LIFECYCLE);
+    const rows: DashboardNode[] = raw.nodes.map((n) => {
+      const origin = n.tag as { serverId: string; serverName: string; org: string };
+      return {
+        ...n,
+        serverId: origin.serverId,
+        server: origin.serverName,
+        org: origin.org,
+        href: `/servers/${origin.serverId}/orgs/${origin.org}/nodes/${encodeURIComponent(n.name)}`,
+      };
+    });
+    return { ...raw, nodes: rows };
+  }
+
+  function renderAggregated(failedScopes: { serverName: string; org: string; reason: string }[] = []) {
+    return render(
+      <FleetDashboard
+        pollUrl="/fleet"
+        initial={aggregatedSnapshot()}
+        initialError={null}
+        failedScopes={failedScopes}
+        showScopeColumns
+      />,
+    );
+  }
+
+  it("renders Server and Org columns and links each row to its own scope", () => {
+    renderAggregated();
+    expect(screen.getByRole("columnheader", { name: "Server" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Org" })).toBeInTheDocument();
+    expect(table().getByRole("link", { name: "web01" })).toHaveAttribute(
+      "href",
+      "/servers/s1/orgs/acme/nodes/web01",
+    );
+    expect(table().getByRole("link", { name: "db01" })).toHaveAttribute(
+      "href",
+      "/servers/s2/orgs/widgets/nodes/db01",
+    );
+    expect(within(rowFor("web01")).getByText("Server One")).toBeInTheDocument();
+    expect(within(rowFor("web01")).getByText("acme")).toBeInTheDocument();
+  });
+
+  it("renders a failedScopes banner without blanking the rest of the dashboard", () => {
+    renderAggregated([{ serverName: "Server Three", org: "*", reason: "unreachable" }]);
+    expect(screen.getByRole("alert")).toHaveTextContent("Server Three (unreachable)");
+    // The rest of the dashboard still renders normally.
+    expect(table().getByRole("link", { name: "web01" })).toBeInTheDocument();
+  });
+
+  it("still filters correctly by stat tile with rows from mixed scopes", async () => {
+    renderAggregated();
+    await userEvent.click(screen.getByRole("button", { name: /Missing/ }));
+    expect(table().getByRole("link", { name: "db01" })).toBeInTheDocument();
+    expect(table().queryByRole("link", { name: "web01" })).not.toBeInTheDocument();
+  });
+
+  it("shows a By organization breakdown linking to each org's own dashboard", () => {
+    renderAggregated();
+    expect(screen.getByRole("heading", { name: "By organization" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Server One / acme" })).toHaveAttribute(
+      "href",
+      "/servers/s1/orgs/acme",
+    );
+    expect(screen.getByRole("link", { name: "Server Two / widgets" })).toHaveAttribute(
+      "href",
+      "/servers/s2/orgs/widgets",
+    );
+  });
+
+  it("has no axe violations in aggregated mode", async () => {
+    const { container } = renderAggregated([
+      { serverName: "Server Three", org: "*", reason: "unreachable" },
+    ]);
     expect(await axe(container)).toHaveNoViolations();
   });
 });

@@ -99,6 +99,21 @@ describe("CreateObjectForm", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
   });
 
+  it("calls onCreated instead of the default redirect when given one", async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockResolvedValue({ ok: true });
+    const onCreated = vi.fn();
+    render(
+      <CreateObjectForm kind="role" onCreate={onCreate} backHref="/roles" onCreated={onCreated} />,
+    );
+    await user.type(screen.getByLabelText("Name"), "web");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(onCreated).toHaveBeenCalledWith("web");
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(nav.refresh).toHaveBeenCalled();
+  });
+
   it("surfaces a server error and does not navigate", async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn().mockResolvedValue({ error: "forbidden" });

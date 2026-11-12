@@ -9,20 +9,20 @@ vi.mock("@/lib/guard", () => ({
 const {
   requireScopeAccess,
   listReachableOrgs,
-  listReachableServers,
+  getServerName,
   isPlatformMemberAccount,
   canManageRoleGrants,
 } = vi.hoisted(() => ({
   requireScopeAccess: vi.fn(),
   listReachableOrgs: vi.fn(),
-  listReachableServers: vi.fn(),
+  getServerName: vi.fn(),
   isPlatformMemberAccount: vi.fn(),
   canManageRoleGrants: vi.fn(),
 }));
 vi.mock("@/lib/admin/access", () => ({
   requireScopeAccess,
   listReachableOrgs,
-  listReachableServers,
+  getServerName,
   isPlatformMemberAccount,
   canManageRoleGrants,
 }));
@@ -47,8 +47,8 @@ const render = (server: string, org: string) =>
 beforeEach(() => {
   requireScopeAccess.mockReset();
   listReachableOrgs.mockReset();
-  listReachableServers.mockReset();
-  listReachableServers.mockResolvedValue([{ id: "s1", name: "Primary" }]);
+  getServerName.mockReset();
+  getServerName.mockResolvedValue("Primary");
   isPlatformMemberAccount.mockReset().mockResolvedValue(false);
   canManageRoleGrants.mockReset().mockResolvedValue(false);
 });
@@ -58,10 +58,19 @@ test("renders the shell for an org the account can reach", async () => {
   listReachableOrgs.mockResolvedValueOnce([{ name: "acme" }, { name: "beta" }]);
   const el = await render("s1", "acme");
   expect(el.props.server).toBe("s1");
+  expect(el.props.serverName).toBe("Primary");
   expect(el.props.org).toBe("acme");
   expect(el.props.orgs).toEqual([{ name: "acme" }, { name: "beta" }]);
   // The signed-in footer shows the dashboard version from package.json.
   expect(el.props.version).toBe(pkg.version);
+});
+
+test("falls back to the raw server id if the name lookup comes back empty", async () => {
+  requireScopeAccess.mockResolvedValueOnce(true);
+  listReachableOrgs.mockResolvedValueOnce([{ name: "acme" }]);
+  getServerName.mockResolvedValueOnce(null);
+  const el = await render("s1", "acme");
+  expect(el.props.serverName).toBe("s1");
 });
 
 test("threads canManageRoleGrants through as the shell's canManageRoles prop", async () => {

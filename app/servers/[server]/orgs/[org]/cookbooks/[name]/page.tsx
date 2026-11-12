@@ -7,6 +7,7 @@ import { ObjectEditor } from "@/components/object-editor";
 import { CookbookVersions } from "@/components/details/cookbook-versions";
 import { DetailSection } from "@/components/details/primitives";
 import { AttributeTree } from "@/components/details/attribute-tree";
+import { listPath } from "@/lib/urls";
 import { deleteCookbookAction, deleteCookbookVersionAction } from "../actions";
 
 export default async function CookbookDetail({
@@ -25,7 +26,6 @@ export default async function CookbookDetail({
     return <p className="text-sm text-danger">{explainRead(res.error)}</p>;
   }
   const versions = parseCookbookVersions(res.data);
-  const base = `/servers/${server}/orgs/${org}/cookbooks`;
   return (
     <ObjectEditor
       name={name}
@@ -33,7 +33,7 @@ export default async function CookbookDetail({
       details={
         <div className="space-y-4">
           <CookbookVersions
-            listHref={base}
+            listHref={listPath("cookbooks")}
             name={name}
             versions={versions}
             onDeleteVersion={deleteCookbookVersionAction.bind(null, server, org, name)}
@@ -44,7 +44,7 @@ export default async function CookbookDetail({
           </DetailSection>
         </div>
       }
-      backHref={base}
+      backHref={listPath("cookbooks")}
       readOnly={true}
     />
   );

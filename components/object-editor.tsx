@@ -33,6 +33,7 @@ export function ObjectEditor({
   onDuplicate,
   nameKind,
   backHref,
+  duplicateBasePath,
   readOnly = false,
 }: {
   name: string;
@@ -55,7 +56,16 @@ export function ObjectEditor({
   onDuplicate?: (name: string, json: string) => Promise<ActionResult>;
   /** Validates the new name in the Duplicate dialog against Chef's rules. */
   nameKind?: NameKind;
+  /** "← Back" target, and where Delete redirects to. */
   backHref: string;
+  /**
+   * Where a successful Duplicate redirects (`${duplicateBasePath}/<newName>`).
+   * Defaults to `backHref`. Pass this separately when `backHref` points at an
+   * aggregated, scope-free list (e.g. `/roles`) but duplicating still creates
+   * the copy in this one concrete server/org, whose detail page lives
+   * elsewhere (e.g. `/servers/<server>/orgs/<org>/roles`).
+   */
+  duplicateBasePath?: string;
   readOnly?: boolean;
 }) {
   const router = useRouter();
@@ -117,7 +127,7 @@ export function ObjectEditor({
       const res = await onDuplicate(newName, initialJson);
       if ("ok" in res) {
         setDuplicating(false);
-        router.push(`${backHref}/${encodeURIComponent(newName)}`);
+        router.push(`${duplicateBasePath ?? backHref}/${encodeURIComponent(newName)}`);
         router.refresh();
       } else {
         setDupError(explain(res.error));

@@ -3,17 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV } from "@/lib/nav";
+import { listPath } from "@/lib/urls";
 
 type Crumb = { label: string; href: string; link: boolean };
 
 /**
- * Path-derived breadcrumb for org pages, e.g. `acme / Data Bags / secrets /
- * api_key`. The org and section/object segments link to their pages; "groups"
- * under members is a structural path segment (no list page of its own) so it's
- * shown as plain text. The last crumb is the current page. Nothing renders on
- * the org home or outside /orgs.
+ * Path-derived breadcrumb for org pages, e.g. `Primary / acme / Data Bags /
+ * secrets / api_key`. The leading crumb is the server's display name — plain
+ * text, not a link: there's no page left that lists "every org on this
+ * server" to send it to (that picker is gone). The org and section/object
+ * segments link to their pages; "groups" under members is a structural path
+ * segment (no list page of its own) so it's shown as plain text. The last
+ * crumb is the current page. Nothing renders on the org home or outside /orgs.
  */
-export function Breadcrumbs() {
+export function Breadcrumbs({ serverName }: { serverName: string }) {
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean);
   // /servers/<server>/orgs/<org>/<section>/... — need at least a section.
@@ -24,18 +27,21 @@ export function Breadcrumbs() {
   const rest = parts.slice(4);
 
   const crumbs: Crumb[] = [
+    { label: serverName, href: "", link: false },
     { label: decodeURIComponent(org), href: `/servers/${server}/orgs/${org}`, link: true },
   ];
   let acc = `/servers/${server}/orgs/${org}`;
   rest.forEach((seg, i) => {
     acc += `/${seg}`;
     const isSection = i === 0;
-    const label = isSection
-      ? (NAV.find((n) => n.slug === seg)?.label ?? decodeURIComponent(seg))
-      : decodeURIComponent(seg);
+    const navEntry = isSection ? NAV.find((n) => n.slug === seg) : undefined;
+    const label = isSection ? (navEntry?.label ?? decodeURIComponent(seg)) : decodeURIComponent(seg);
     // "groups" sits under /members but has no list page of its own.
     const structural = seg === "groups" && rest[i - 1] === "members";
-    crumbs.push({ label, href: acc, link: !structural });
+    // A section that's moved to an aggregated, scope-free list (lib/nav.ts)
+    // no longer has a page at this per-org path — point its crumb there instead.
+    const href = navEntry?.standalone ? listPath(seg) : acc;
+    crumbs.push({ label, href, link: !structural });
   });
 
   return (

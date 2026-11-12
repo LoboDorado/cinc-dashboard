@@ -4,10 +4,15 @@ import { axe } from "@/test/axe";
 import userEvent from "@testing-library/user-event";
 import { NewObjectForm } from "./new-object-form";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => nav }));
 
 const onCreate = vi.fn(async () => ({ ok: true as const }));
-beforeEach(() => onCreate.mockClear());
+beforeEach(() => {
+  onCreate.mockClear();
+  nav.push.mockClear();
+  nav.refresh.mockClear();
+});
 
 const setup = () =>
   render(
@@ -42,4 +47,24 @@ test("has no axe violations, including the invalid-name state", async () => {
   expect(await axe(container)).toHaveNoViolations();
   await userEvent.type(screen.getByLabelText("Name"), "web.server");
   expect(await axe(container)).toHaveNoViolations();
+});
+
+test("calls onCreated instead of the default redirect when given one", async () => {
+  const onCreated = vi.fn();
+  render(
+    <NewObjectForm
+      title="New node"
+      backHref="/nodes"
+      onCreate={onCreate}
+      onCreated={onCreated}
+      initialJson="{}"
+      nameKind="node"
+    />,
+  );
+  await userEvent.type(screen.getByLabelText("Name"), "web1");
+  await userEvent.click(createButton());
+
+  expect(onCreated).toHaveBeenCalledWith("web1");
+  expect(nav.push).not.toHaveBeenCalled();
+  expect(nav.refresh).toHaveBeenCalled();
 });

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { runAction, parseJsonObject } from "./action";
 import { CincError } from "./errors";
 import { AccessDeniedError } from "../admin/access";
@@ -7,6 +7,16 @@ import { DelegationDeniedError } from "../admin/grants";
 
 test("runAction returns ok on success", async () => {
   expect(await runAction(async () => undefined)).toEqual({ ok: true });
+});
+
+test("runAction revalidates every path in an array, not just a single string", async () => {
+  const { revalidatePath } = await import("next/cache");
+  vi.mocked(revalidatePath).mockClear();
+
+  await runAction(async () => undefined, { revalidate: ["/roles", "/servers/s1/orgs/acme/roles/my-role"] });
+
+  expect(revalidatePath).toHaveBeenNthCalledWith(1, "/roles", "layout");
+  expect(revalidatePath).toHaveBeenNthCalledWith(2, "/servers/s1/orgs/acme/roles/my-role", "layout");
 });
 
 test("runAction maps 403 to forbidden", async () => {

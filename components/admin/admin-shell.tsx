@@ -43,8 +43,8 @@ export function AdminShell({
             />
             <span className="text-text">dashboard admin</span>
           </Link>
-          <Link href="/servers" className="text-sm text-muted hover:text-link">
-            ← back to servers
+          <Link href="/" className="text-sm text-muted hover:text-link">
+            ← back to dashboard
           </Link>
         </div>
         <UserMenu name={displayName} isPlatformMember />

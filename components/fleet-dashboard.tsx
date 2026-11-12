@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { SortableTh } from "@/components/ui/sortable";
@@ -15,11 +16,11 @@ import {
 } from "@/lib/sort";
 import {
   compareVersions,
-  type FleetSnapshot,
   type FleetStats,
   type NodeSummary,
 } from "@/lib/cinc/fleet";
 import { relativeAgo } from "@/lib/time";
+import { orgPath } from "@/lib/urls";
 import { PlatformIcon } from "@/components/platform/platform-icon";
 import { CheckInHistogram } from "@/components/fleet-histogram";
 import { TILE_GRID } from "@/components/fleet-skeleton";
@@ -31,21 +32,45 @@ import {
   IconWarning,
 } from "@/components/ui/icons";
 
+/**
+ * One row. `href` is fully resolved by the caller: a single-scope dashboard
+ * has one server/org for every row, but the aggregated dashboard's rows each
+ * point at a different one, so there's no single prefix to build a link from
+ * here. `server`/`org`/`serverId` are set only by the aggregated caller --
+ * when present, two extra sortable columns render and the "By organization"
+ * breakdown groups on them.
+ */
+export type DashboardNode = NodeSummary & {
+  href: string;
+  serverId?: string;
+  server?: string;
+  org?: string;
+};
+
+export type DashboardSnapshot = { stats: FleetStats; nodes: DashboardNode[]; generatedAt: number };
+
+/** One failed (server, org) scope, shown as a banner distinct from a single
+ *  poll-level `error` string -- an aggregated dashboard can have several. */
+export type FailedScope = { serverName: string; org: string; reason: string };
+
 /** Which stat tile is the active filter for the node list, if any. */
 type Filter = "recent" | "missing" | "unconfigured" | "outdated" | null;
 
-// The node list refreshes every 10s so it stays live. The boom-stat tiles up
-// top refresh on a calmer 60s cadence — the counts move slowly and the constant
-// re-render is distracting. Both are fed by the same snapshot poll (no extra
-// fetch): every poll updates the list, and the tiles are re-snapshotted from the
-// freshest data once a minute. First paint is handled by streaming (see
-// app/orgs/[org]/page.tsx), not by polling fast.
-const LIST_POLL_MS = 10_000;
+// The node list refreshes on a poll interval so it stays live (10s for a
+// single org; the aggregated dashboard uses a slower cadence since it re-runs
+// a full multi-org sweep every tick -- see its own caller). The boom-stat
+// tiles up top refresh on a calmer 60s cadence — the counts move slowly and
+// the constant re-render is distracting. Both are fed by the same snapshot
+// poll (no extra fetch): every poll updates the list, and the tiles are
+// re-snapshotted from the freshest data once a minute. First paint is handled
+// by streaming (see app/orgs/[org]/page.tsx), not by polling fast.
+const DEFAULT_LIST_POLL_MS = 10_000;
 const STATS_REFRESH_MS = 60_000;
 /** Cap the rendered list so a huge fleet can't bloat the DOM; the count note is honest about it. */
 const MAX_ROWS = 200;
 
-/** Sortable columns of the node table. */
+/** Sortable columns of the node table. `server`/`org` are inert (no header
+ *  renders for them) unless the caller's rows actually carry those fields. */
 const SORT_KEYS = [
   "node",
   "status",
@@ -53,6 +78,8 @@ const SORT_KEYS = [
   "env",
   "platform",
   "client",
+  "server",
+  "org",
 ] as const;
 /** Default order matches the server's snapshot: most recently seen first. */
 const DEFAULT_SORT: SortState = { key: "lastSeen", dir: "desc" };
@@ -82,9 +109,9 @@ function statusRank(n: NodeSummary): number {
 }
 
 /** Order nodes by the chosen column; "never seen" / "unknown version" pin last. */
-function sortNodes(nodes: NodeSummary[], sort: SortState): NodeSummary[] {
+function sortNodes(nodes: DashboardNode[], sort: SortState): DashboardNode[] {
   const { key, dir } = sort;
-  const cmp = (a: NodeSummary, b: NodeSummary): number => {
+  const cmp = (a: DashboardNode, b: DashboardNode): number => {
     switch (key) {
       case "node":
         return applyDir(byString(a.name, b.name), dir);
@@ -110,6 +137,10 @@ function sortNodes(nodes: NodeSummary[], sort: SortState): NodeSummary[] {
           a.chefVersion,
           b.chefVersion,
         );
+      case "server":
+        return applyDir(byString(a.server ?? "", b.server ?? ""), dir);
+      case "org":
+        return applyDir(byString(a.org ?? "", b.org ?? ""), dir);
       default:
         return 0;
     }
@@ -118,18 +149,25 @@ function sortNodes(nodes: NodeSummary[], sort: SortState): NodeSummary[] {
 }
 
 export function FleetDashboard({
-  server,
-  org,
+  pollUrl,
+  listPollMs = DEFAULT_LIST_POLL_MS,
   initial,
   initialError,
+  failedScopes = [],
+  showScopeColumns = false,
 }: {
-  server: string;
-  org: string;
-  initial: FleetSnapshot | null;
+  /** Polled every `listPollMs` for a fresh DashboardSnapshot (JSON). */
+  pollUrl: string;
+  listPollMs?: number;
+  initial: DashboardSnapshot | null;
   initialError: string | null;
+  /** Scopes the aggregated dashboard couldn't load, shown as their own banner. */
+  failedScopes?: FailedScope[];
+  /** Renders the Server/Org columns and the "By organization" breakdown. */
+  showScopeColumns?: boolean;
 }) {
   const router = useRouter();
-  const [snapshot, setSnapshot] = useState<FleetSnapshot | null>(initial);
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(initial);
   // The tiles read from their own `stats` state, refreshed on a slower cadence
   // than the list. `latestStats` always holds the freshest poll's stats so the
   // 60s timer can promote them without depending on a stale render closure.
@@ -155,7 +193,7 @@ export function FleetDashboard({
       inFlight.current = true;
       setRefreshing(true);
       try {
-        const res = await fetch(`/servers/${server}/orgs/${org}/fleet`, { cache: "no-store" });
+        const res = await fetch(pollUrl, { cache: "no-store" });
         if (!active) return;
         if (res.status === 401) {
           router.push("/login");
@@ -167,7 +205,7 @@ export function FleetDashboard({
           setError(explainError(String(json.error)));
         } else {
           const t = Date.now();
-          const next = json as FleetSnapshot;
+          const next = json as DashboardSnapshot;
           setSnapshot(next);
           latestStats.current = next.stats;
           // Seed the tiles on the first data we ever get (e.g. SSR failed and
@@ -189,12 +227,12 @@ export function FleetDashboard({
     // `poll` is async; wrap so its promise is explicitly fire-and-forget (and
     // we never hand setInterval a bare identifier).
     if (!initial) void poll();
-    const id = setInterval(() => void poll(), LIST_POLL_MS);
+    const id = setInterval(() => void poll(), listPollMs);
     return () => {
       active = false;
       clearInterval(id);
     };
-  }, [server, org, initial, router]);
+  }, [pollUrl, listPollMs, initial, router]);
 
   // Promote the freshest stats into the tiles once a minute, decoupled from the
   // 10s list poll so the boom numbers don't flicker every few seconds.
@@ -216,9 +254,13 @@ export function FleetDashboard({
   const { sort, setSort, replaceSort } = useSort("sort", DEFAULT_SORT, SORT_KEYS);
   // `stats` (tiles) is the slow-cadence state above; `nodes` (list) tracks the
   // 10s snapshot directly.
-  const nodes = snapshot?.nodes ?? [];
+  const nodes = useMemo(() => snapshot?.nodes ?? [], [snapshot]);
   const shown = sortNodes(filterNodes(nodes, filter), sort);
   const capped = shown.slice(0, MAX_ROWS);
+  // Only appears once the full sweep has landed (nodes carry server/org from
+  // the start, so no extra fetch is needed) -- not shown during the fast
+  // counts-only preview tier, same as the histogram and node list.
+  const breakdown = useMemo(() => orgBreakdown(nodes, showScopeColumns), [nodes, showScopeColumns]);
 
   const toggle = (f: Exclude<Filter, null>) =>
     setFilter((cur) => (cur === f ? null : f));
@@ -297,6 +339,20 @@ export function FleetDashboard({
         )}
       </div>
 
+      {failedScopes.length > 0 && (
+        <p role="alert" className="flex items-start gap-1.5 text-sm text-warn">
+          <IconWarning />
+          <span>
+            Couldn&apos;t load {failedScopes.length} scope{failedScopes.length === 1 ? "" : "s"}:{" "}
+            {failedScopes
+              .map((f) => (f.org === "*" ? `${f.serverName} (${f.reason})` : `${f.serverName} / ${f.org} (${f.reason})`))
+              .join("; ")}
+          </span>
+        </p>
+      )}
+
+      {breakdown.length > 1 && <OrgBreakdown rows={breakdown} />}
+
       {/* Node list */}
       <Card flush>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -331,13 +387,13 @@ export function FleetDashboard({
                 render; CSS shows one, so there's no layout flash on hydration. */}
             <ul aria-label="Fleet nodes" className="divide-y divide-border sm:hidden">
               {capped.map((n) => (
-                <NodeCard key={n.name} server={server} org={org} node={n} now={now} />
+                <NodeCard key={rowKey(n, showScopeColumns)} node={n} now={now} />
               ))}
             </ul>
             <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-sm">
                 <caption className="sr-only">
-                  Fleet nodes; use the column headers to sort
+                  Fleet nodes; use the column headers to sort{showScopeColumns ? ", including server and organization" : ""}
                 </caption>
                 <thead>
                   <tr className="border-b border-border text-left text-muted">
@@ -377,11 +433,27 @@ export function FleetDashboard({
                       sort={sort}
                       onSort={setSort}
                     />
+                    {showScopeColumns && (
+                      <>
+                        <SortableTh
+                          label="Server"
+                          sortKey="server"
+                          sort={sort}
+                          onSort={setSort}
+                        />
+                        <SortableTh
+                          label="Org"
+                          sortKey="org"
+                          sort={sort}
+                          onSort={setSort}
+                        />
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {capped.map((n) => (
-                    <NodeRow key={n.name} server={server} org={org} node={n} now={now} />
+                    <NodeRow key={rowKey(n, showScopeColumns)} node={n} now={now} showScopeColumns={showScopeColumns} />
                   ))}
                 </tbody>
               </table>
@@ -400,22 +472,27 @@ export function FleetDashboard({
   );
 }
 
+/** Disambiguates two same-named nodes from different scopes (React key and
+ *  the aggregated dashboard's sort grouping both need this, not just links --
+ *  those already have distinct `href`s). */
+function rowKey(node: DashboardNode, showScopeColumns: boolean): string {
+  return showScopeColumns ? `${node.server}/${node.org}/${node.name}` : node.name;
+}
+
 function NodeRow({
-  server,
-  org,
   node,
   now,
+  showScopeColumns,
 }: {
-  server: string;
-  org: string;
-  node: NodeSummary;
+  node: DashboardNode;
   now: number;
+  showScopeColumns: boolean;
 }) {
   return (
     <tr className="border-b border-border last:border-0 hover:bg-surface-2">
       <td className="px-4 py-2">
         <a
-          href={`/servers/${server}/orgs/${org}/nodes/${encodeURIComponent(node.name)}`}
+          href={node.href}
           className="font-mono text-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           {node.name}
@@ -447,30 +524,26 @@ function NodeRow({
       <td className="px-4 py-2 tabular-nums text-muted">
         {node.chefVersion ?? "—"}
       </td>
+      {showScopeColumns && (
+        <>
+          <td className="px-4 py-2 text-muted">{node.server}</td>
+          <td className="px-4 py-2 text-muted">{node.org}</td>
+        </>
+      )}
     </tr>
   );
 }
 
 /** Phone layout for one node: name + last check-in, status chips, details. */
-function NodeCard({
-  server,
-  org,
-  node,
-  now,
-}: {
-  server: string;
-  org: string;
-  node: NodeSummary;
-  now: number;
-}) {
-  const details = [node.environment, platformText(node), node.chefVersion]
+function NodeCard({ node, now }: { node: DashboardNode; now: number }) {
+  const details = [node.server && node.org ? `${node.server} / ${node.org}` : null, node.environment, platformText(node), node.chefVersion]
     .filter(Boolean)
     .join(" · ");
   return (
     <li className="space-y-1.5 px-4 py-3">
       <div className="flex items-baseline justify-between gap-3">
         <a
-          href={`/servers/${server}/orgs/${org}/nodes/${encodeURIComponent(node.name)}`}
+          href={node.href}
           className="min-w-0 break-all font-mono text-sm text-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           {node.name}
@@ -484,6 +557,94 @@ function NodeCard({
       <StatusChips node={node} />
       {details && <p className="text-xs text-muted">{details}</p>}
     </li>
+  );
+}
+
+type OrgBreakdownRow = {
+  key: string;
+  serverId: string;
+  server: string;
+  org: string;
+  total: number;
+  missing: number;
+  unconfigured: number;
+  outdated: number;
+};
+
+/** Groups the full snapshot's nodes by (server, org) for the secondary "By
+ *  organization" strip -- a flat merged number can otherwise hide exactly one
+ *  unhealthy org behind a healthy-looking aggregate. `[]` when there's only
+ *  one (or zero) scope: nothing to break down. */
+function orgBreakdown(nodes: DashboardNode[], showScopeColumns: boolean): OrgBreakdownRow[] {
+  if (!showScopeColumns) return [];
+  const byKey = new Map<string, OrgBreakdownRow>();
+  for (const n of nodes) {
+    if (n.serverId === undefined || n.server === undefined || n.org === undefined) continue;
+    const key = `${n.serverId}/${n.org}`;
+    let row = byKey.get(key);
+    if (!row) {
+      row = { key, serverId: n.serverId, server: n.server, org: n.org, total: 0, missing: 0, unconfigured: 0, outdated: 0 };
+      byKey.set(key, row);
+    }
+    row.total++;
+    if (n.missing) row.missing++;
+    if (n.unconfigured) row.unconfigured++;
+    if (isOutdated(n)) row.outdated++;
+  }
+  return [...byKey.values()].sort(
+    (a, b) => a.server.localeCompare(b.server) || a.org.localeCompare(b.org),
+  );
+}
+
+/** Dense, static (unsorted-by-the-user) secondary table -- kept visually
+ *  smaller than the main stat tiles on purpose, so it doesn't compete with
+ *  them for attention. */
+function OrgBreakdown({ rows }: { rows: OrgBreakdownRow[] }) {
+  return (
+    <Card flush>
+      <div className="border-b border-border px-4 py-2.5">
+        <h2 className="text-sm font-medium text-text">By organization</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <caption className="sr-only">Node counts per server and organization</caption>
+          <thead>
+            <tr className="border-b border-border text-left text-muted">
+              <th scope="col" className="px-4 py-2 font-medium">
+                Server / Org
+              </th>
+              <th scope="col" className="px-4 py-2 font-medium">
+                Total
+              </th>
+              <th scope="col" className="px-4 py-2 font-medium">
+                Missing
+              </th>
+              <th scope="col" className="px-4 py-2 font-medium">
+                Unconfigured
+              </th>
+              <th scope="col" className="px-4 py-2 font-medium">
+                Outdated
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-b border-border last:border-0 hover:bg-surface-2">
+                <td className="px-4 py-2">
+                  <Link href={orgPath(r.serverId, r.org)} className="text-link hover:underline">
+                    {r.server} / {r.org}
+                  </Link>
+                </td>
+                <td className="px-4 py-2 tabular-nums text-muted">{r.total}</td>
+                <td className="px-4 py-2 tabular-nums text-muted">{r.missing}</td>
+                <td className="px-4 py-2 tabular-nums text-muted">{r.unconfigured}</td>
+                <td className="px-4 py-2 tabular-nums text-muted">{r.outdated}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 
@@ -677,7 +838,7 @@ function platformText(n: NodeSummary): string | null {
 // Filter by the same independent diagnostic flags the stat tiles count (not the
 // snapshot's single-valued `status`), so a node that's both missing and
 // unconfigured appears under either tile and the list matches the tile's number.
-function filterNodes(nodes: NodeSummary[], filter: Filter): NodeSummary[] {
+function filterNodes(nodes: DashboardNode[], filter: Filter): DashboardNode[] {
   if (filter === null) return nodes;
   if (filter === "recent") return nodes.filter((n) => n.recent);
   if (filter === "missing") return nodes.filter((n) => n.missing);

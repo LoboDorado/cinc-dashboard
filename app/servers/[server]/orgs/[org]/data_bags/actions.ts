@@ -4,6 +4,7 @@ import { currentAccountId } from "@/lib/guard";
 import { requireObjectAccess } from "@/lib/admin/access";
 import { dataBags } from "@/lib/cinc/databags";
 import { runAction, parseJsonObject, type ActionResult } from "@/lib/cinc/action";
+import { listPath } from "@/lib/urls";
 
 export async function createBag(
   server: string,
@@ -16,7 +17,7 @@ export async function createBag(
       const ctx = await requireObjectAccess(accountId, server, org, "data_bags", "write");
       return dataBags.createBag(ctx, name);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/data_bags` },
+    { revalidate: listPath("data_bags") },
   );
 }
 
@@ -31,7 +32,7 @@ export async function deleteBag(
       const ctx = await requireObjectAccess(accountId, server, org, "data_bags", "write");
       return dataBags.removeBag(ctx, bag);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/data_bags` },
+    { revalidate: listPath("data_bags") },
   );
 }
 

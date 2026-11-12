@@ -81,7 +81,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   if (hasSession && isAuthPage) {
-    return NextResponse.redirect(new URL(safeFrom(request) ?? "/servers", request.url));
+    return NextResponse.redirect(new URL(safeFrom(request) ?? "/", request.url));
   }
 
   return proceed(request, nonce, csp);

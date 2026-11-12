@@ -4,6 +4,7 @@ import { makeResource } from "@/lib/cinc/resource";
 import { safeGet, explainRead } from "@/lib/cinc/safe-get";
 import { ObjectEditor } from "@/components/object-editor";
 import { EnvironmentDetails } from "@/components/details/environment-details";
+import { listPath } from "@/lib/urls";
 import {
   saveEnvironment,
   deleteEnvironment,
@@ -34,7 +35,8 @@ export default async function EnvironmentDetail({
         name={name}
         initialJson={JSON.stringify(res.data, null, 2)}
         details={<EnvironmentDetails data={res.data} />}
-        backHref={base}
+        backHref={listPath("environments")}
+        duplicateBasePath={base}
         onDuplicate={createEnvironment.bind(null, server, org)}
         nameKind="environment"
         readOnly={true}
@@ -52,7 +54,8 @@ export default async function EnvironmentDetail({
           onSaveConstraints={saveEnvironment.bind(null, server, org, name)}
         />
       }
-      backHref={base}
+      backHref={listPath("environments")}
+      duplicateBasePath={base}
       onSave={saveEnvironment.bind(null, server, org, name)}
       onDelete={deleteEnvironment.bind(null, server, org, name)}
       onDuplicate={createEnvironment.bind(null, server, org)}

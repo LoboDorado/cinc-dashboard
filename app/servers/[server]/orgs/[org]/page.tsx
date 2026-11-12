@@ -9,6 +9,7 @@ import { safeGet, explainRead } from "@/lib/cinc/safe-get";
 import { loadFleetSnapshot } from "@/lib/cinc/fleet-snapshot";
 import { fetchFleetCounts } from "@/lib/cinc/fleet-counts";
 import { nowMs } from "@/lib/cinc/client";
+import { objectPath, orgPath } from "@/lib/urls";
 
 export default async function OrgDashboard({
   params,
@@ -73,9 +74,14 @@ async function FullDashboard({
   snapshotPromise: ReturnType<typeof loadFleetSnapshot>;
 }) {
   const res = await snapshotPromise;
-  const initial = "error" in res ? null : res.data;
+  const initial = "error" in res
+    ? null
+    : {
+        ...res.data,
+        nodes: res.data.nodes.map((n) => ({ ...n, href: objectPath(server, org, "nodes", n.name) })),
+      };
   const initialError = "error" in res ? explainRead(res.error) : null;
   return (
-    <FleetDashboard server={server} org={org} initial={initial} initialError={initialError} />
+    <FleetDashboard pollUrl={`${orgPath(server, org)}/fleet`} initial={initial} initialError={initialError} />
   );
 }

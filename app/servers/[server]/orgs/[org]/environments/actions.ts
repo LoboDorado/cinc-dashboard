@@ -4,6 +4,7 @@ import { currentAccountId } from "@/lib/guard";
 import { requireObjectAccess } from "@/lib/admin/access";
 import { makeResource } from "@/lib/cinc/resource";
 import { runAction, parseJsonObject, type ActionResult } from "@/lib/cinc/action";
+import { listPath, objectPath } from "@/lib/urls";
 
 const environments = makeResource("environments");
 
@@ -21,7 +22,7 @@ export async function saveEnvironment(
       const ctx = await requireObjectAccess(accountId, server, org, "environments", "write");
       return environments.update(ctx, name, parsed.value);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/environments` },
+    { revalidate: [listPath("environments"), objectPath(server, org, "environments", name)] },
   );
 }
 
@@ -39,7 +40,7 @@ export async function createEnvironment(
       const ctx = await requireObjectAccess(accountId, server, org, "environments", "write");
       return environments.create(ctx, { ...parsed.value, name });
     },
-    { revalidate: `/servers/${server}/orgs/${org}/environments` },
+    { revalidate: listPath("environments") },
   );
 }
 
@@ -54,6 +55,6 @@ export async function deleteEnvironment(
       const ctx = await requireObjectAccess(accountId, server, org, "environments", "write");
       return environments.remove(ctx, name);
     },
-    { revalidate: `/servers/${server}/orgs/${org}/environments` },
+    { revalidate: listPath("environments") },
   );
 }
