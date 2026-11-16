@@ -133,10 +133,11 @@ the rename, the database/auth/RBAC/audit core, the routing move to
 `/servers/[server]/orgs/[org]/`, the admin UI for managing registered
 servers/collectors/accounts/role grants at all three scopes (`app/admin/**`,
 `app/servers/[server]/admin/**`, `app/servers/[server]/orgs/[org]/admin/**`),
-the audit log viewers at those same three scopes, and an e2e suite covering
-all of it. Not yet built: the Collector integration (Nodes attribute
-filtering, Compliance) that originally motivated this work -- tracked as a
-follow-up plan, not done yet.
+the audit log viewers at those same three scopes, an e2e suite covering all
+of it, and the Collector integration that originally motivated this work:
+per-node Compliance history (`lib/collector/compliance.ts`), a fleet-wide
+Compliance search/export page (`lib/collector/compliance-search.ts`,
+`/compliance`), and Nodes attribute filtering (`lib/collector/node-fields.ts`).
 
 ## Conventions
 

@@ -36,6 +36,16 @@ test("the aggregated Fleet dashboard has no WCAG AA violations", async ({ page }
   expect(await violations(page, "/")).toEqual([]);
 });
 
+test("the fleet Compliance page has no WCAG AA violations", async ({ page }) => {
+  // No collector is registered against the e2e fixture, so this exercises
+  // the real degrade path -- the same CTA state the per-node Compliance tab
+  // already lives under with no bespoke e2e coverage beyond this sweep.
+  await login(page, ADMIN);
+  await page.goto("/compliance");
+  await expect(page.getByRole("link", { name: "Register a collector" })).toBeVisible();
+  expect(await violations(page, "/compliance")).toEqual([]);
+});
+
 test("the create-form scope picker has no WCAG AA violations", async ({ page }) => {
   // e2e-admin reaches more than one org, so this is the only fixture path
   // that renders the ScopePicker's <select> -- the single-scope auto-skip

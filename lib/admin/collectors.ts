@@ -117,6 +117,18 @@ export async function getCollectorsForServer(serverId: string): Promise<Decrypte
   }));
 }
 
+/**
+ * True if any of `serverIds` has a collector linked. A local indexed join,
+ * not a live collector HTTP call -- same reasoning as the node detail page's
+ * own "does this server have a collector" check. Dedupes by distinct id
+ * first, mirroring `getCollectorsForServer`'s own callers.
+ */
+export async function anyCollectorRegistered(serverIds: readonly string[]): Promise<boolean> {
+  const distinct = [...new Set(serverIds)];
+  const lists = await Promise.all(distinct.map((id) => getCollectorsForServer(id)));
+  return lists.some((l) => l.length > 0);
+}
+
 async function setLinkedServers(
   client: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
   collectorId: string,

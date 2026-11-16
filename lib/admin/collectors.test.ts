@@ -16,6 +16,7 @@ import {
   deleteRegisteredCollector,
   listRegisteredCollectors,
   getCollectorsForServer,
+  anyCollectorRegistered,
 } from "./collectors";
 import { encrypt } from "../db/secretbox";
 
@@ -172,4 +173,31 @@ test("getCollectorsForServer decrypts the bearer token (and CA cert) of every li
 test("getCollectorsForServer returns an empty array when no collector is linked", async () => {
   query.mockResolvedValueOnce({ rows: [] });
   expect(await getCollectorsForServer("s-unlinked")).toEqual([]);
+});
+
+test("anyCollectorRegistered is true when at least one of the given servers has a collector linked", async () => {
+  query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({
+    rows: [
+      {
+        id: "c1",
+        name: "Collector A",
+        base_url: "https://collector.example.com",
+        bearer_token_encrypted: encrypt("secret-token"),
+        ca_cert: null,
+        tls_no_verify: false,
+      },
+    ],
+  });
+  expect(await anyCollectorRegistered(["s-unlinked", "s1"])).toBe(true);
+});
+
+test("anyCollectorRegistered is false when none of the given servers has a collector linked", async () => {
+  query.mockResolvedValue({ rows: [] });
+  expect(await anyCollectorRegistered(["s1", "s2"])).toBe(false);
+});
+
+test("anyCollectorRegistered dedupes repeated server ids into one call each", async () => {
+  query.mockResolvedValue({ rows: [] });
+  await anyCollectorRegistered(["s1", "s1", "s1"]);
+  expect(query).toHaveBeenCalledTimes(1);
 });

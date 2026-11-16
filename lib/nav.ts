@@ -13,4 +13,5 @@ export const NAV: { label: string; slug: string; standalone?: boolean }[] = [
   { label: "Cookbooks", slug: "cookbooks", standalone: true },
   { label: "Policies", slug: "policies", standalone: true },
   { label: "Clients", slug: "clients", standalone: true },
+  { label: "Compliance", slug: "compliance", standalone: true },
 ];

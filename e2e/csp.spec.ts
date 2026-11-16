@@ -51,6 +51,7 @@ const pages = [
   "/cookbooks",
   "/policies",
   "/members",
+  "/compliance",
   orgPath(),
   orgPath("nodes", "seed-web01"),
   orgPath("roles", "base"),

@@ -8,7 +8,7 @@ import { partitionScoped, type ScopedOutcome } from "../cinc/aggregate";
 export type CollectorNodeFields = { lastCCRStatus: "success" | "failure" | null };
 export type FailedCollectorScope = { serverId: string; serverName: string; reason: string };
 
-type RawNode = { Org: string; Name: string; LastCCRStatus: string };
+export type RawNode = { Org: string; Name: string; LastCCRStatus: string; Attributes?: unknown };
 
 // GET /api/v0/nodes has only a limit, no offset/cursor -- a generous request
 // is the only mitigation available; an org with more nodes than this is
@@ -17,9 +17,9 @@ const NODES_LIMIT = 5000;
 
 // Mirrors lib/cinc/fleet-aggregate.ts's PER_SCOPE_TIMEOUT_MS -- a shared
 // aggregated page now pays for a slow collector on every viewer's behalf.
-const COLLECTOR_TIMEOUT_MS = 15_000;
+export const COLLECTOR_TIMEOUT_MS = 15_000;
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) => {
@@ -37,7 +37,7 @@ function normalize(status: string): "success" | "failure" | null {
   return status === "success" || status === "failure" ? status : null;
 }
 
-function toConnection(c: DecryptedCollector): CollectorConnection {
+export function toConnection(c: DecryptedCollector): CollectorConnection {
   return {
     collectorId: c.id,
     baseUrl: c.baseUrl,
@@ -47,16 +47,15 @@ function toConnection(c: DecryptedCollector): CollectorConnection {
   };
 }
 
+export type CollectorEntry = { collector: DecryptedCollector; serverIds: Set<string> };
+
 /**
- * Bulk-loads the one collector-only field the Nodes-list facets need
- * (LastCCRStatus) across every given (server,org) scope, keyed by
- * `${serverId}::${org}::${name}` using the Org/Name the COLLECTOR ITSELF
- * reported for each row -- not which collector or token happened to answer.
- *
- * Dedupes by distinct serverId first (one getCollectorsForServer call per
+ * Shared fan-out skeleton for `loadCollectorNodeFields`/`loadCollectorNodeAttributes`:
+ * dedupes by distinct serverId first (one getCollectorsForServer call per
  * server, mirroring lib/admin/access.ts's mintContextsMany server-decrypt
  * dedup), then by distinct collectorId (a single collector can be linked to
- * more than one registered server; call it once, not once per server).
+ * more than one registered server; call it once, not once per server), then
+ * fetches each distinct collector's full `/api/v0/nodes` list exactly once.
  *
  * Caller contract: `scopes` must already be access-filtered (drawn from
  * requireObjectAccessMany's contexts, not raw listReachableScopes) -- this
@@ -66,19 +65,22 @@ function toConnection(c: DecryptedCollector): CollectorConnection {
  *
  * Documented limitation: if one collector is linked to more than one
  * registered server, its /nodes response carries no signal of which
- * physical server a node actually lives on -- this applies that collector's
+ * physical server a node actually lives on -- callers apply that collector's
  * data to every server it's linked to among `scopes`. A same-org-same-name
- * collision across two servers sharing one collector could misattribute
- * converge status. Not fixable without a cinc-collector API change;
- * realistically rare given one collector token fixes one org, which in
- * practice maps to one Cinc Server.
+ * collision across two servers sharing one collector could misattribute a
+ * node's data. Not fixable without a cinc-collector API change; realistically
+ * rare given one collector token fixes one org, which in practice maps to
+ * one Cinc Server.
  */
-export async function loadCollectorNodeFields(
+export async function fetchRawNodesByScope(
   scopes: ReadonlyArray<{ serverId: string; serverName: string; org: string }>,
   audit: CollectorAuditContext,
-): Promise<{ fields: Map<string, CollectorNodeFields>; failedScopes: FailedCollectorScope[] }> {
-  if (scopes.length === 0) return { fields: new Map(), failedScopes: [] };
-
+): Promise<{
+  succeeded: Extract<ScopedOutcome<RawNode[]>, { ok: true }>[];
+  failed: Extract<ScopedOutcome<RawNode[]>, { ok: false }>[];
+  byCollectorId: Map<string, CollectorEntry>;
+  serverNameOf: Map<string, string>;
+}> {
   const distinctServerIds = [...new Set(scopes.map((s) => s.serverId))];
   const collectorsByServerId = new Map(
     await Promise.all(
@@ -89,7 +91,7 @@ export async function loadCollectorNodeFields(
   // Flatten into distinct collectors, each remembering every serverId (among
   // the given scopes) it's linked to -- a collector linked to several
   // servers is queried once, not once per server.
-  const byCollectorId = new Map<string, { collector: DecryptedCollector; serverIds: Set<string> }>();
+  const byCollectorId = new Map<string, CollectorEntry>();
   for (const serverId of distinctServerIds) {
     for (const collector of collectorsByServerId.get(serverId) ?? []) {
       const entry = byCollectorId.get(collector.id);
@@ -130,10 +132,41 @@ export async function loadCollectorNodeFields(
     }),
   );
   const { succeeded, failed } = partitionScoped(outcomes);
+  return { succeeded, failed, byCollectorId, serverNameOf };
+}
+
+export function buildFailedScopes(
+  failed: Extract<ScopedOutcome<RawNode[]>, { ok: false }>[],
+  byCollectorId: Map<string, CollectorEntry>,
+  serverNameOf: Map<string, string>,
+): FailedCollectorScope[] {
+  return failed.flatMap((f) => {
+    const entry = byCollectorId.get(f.serverId); // f.serverId holds the collector's own id, see fetchRawNodesByScope
+    if (!entry) return [];
+    return [...entry.serverIds].map((serverId) => ({
+      serverId,
+      serverName: serverNameOf.get(serverId) ?? serverId,
+      reason: f.error,
+    }));
+  });
+}
+
+/**
+ * Bulk-loads the one collector-only field the Nodes-list facets need
+ * (LastCCRStatus) across every given (server,org) scope, keyed by
+ * `${serverId}::${org}::${name}` using the Org/Name the COLLECTOR ITSELF
+ * reported for each row -- not which collector or token happened to answer.
+ */
+export async function loadCollectorNodeFields(
+  scopes: ReadonlyArray<{ serverId: string; serverName: string; org: string }>,
+  audit: CollectorAuditContext,
+): Promise<{ fields: Map<string, CollectorNodeFields>; failedScopes: FailedCollectorScope[] }> {
+  if (scopes.length === 0) return { fields: new Map(), failedScopes: [] };
+  const { succeeded, failed, byCollectorId, serverNameOf } = await fetchRawNodesByScope(scopes, audit);
 
   const fields = new Map<string, CollectorNodeFields>();
   for (const outcome of succeeded) {
-    const entry = byCollectorId.get(outcome.serverId); // outcome.serverId holds the collector's own id, see note above
+    const entry = byCollectorId.get(outcome.serverId); // outcome.serverId holds the collector's own id, see fetchRawNodesByScope
     if (!entry) continue;
     for (const serverId of entry.serverIds) {
       for (const n of outcome.data) {
@@ -142,15 +175,37 @@ export async function loadCollectorNodeFields(
     }
   }
 
-  const failedScopes: FailedCollectorScope[] = failed.flatMap((f) => {
-    const entry = byCollectorId.get(f.serverId);
-    if (!entry) return [];
-    return [...entry.serverIds].map((serverId) => ({
-      serverId,
-      serverName: serverNameOf.get(serverId) ?? serverId,
-      reason: f.error,
-    }));
-  });
+  return { fields, failedScopes: buildFailedScopes(failed, byCollectorId, serverNameOf) };
+}
 
-  return { fields, failedScopes };
+export type NodeAttributesResult = { attributesByKey: Map<string, unknown>; failedScopes: FailedCollectorScope[] };
+
+/**
+ * Lazy companion to `loadCollectorNodeFields`, sharing its fan-out: bulk-loads
+ * each node's full `Attributes` ohai document across the given scopes, keyed
+ * the same way (`${serverId}::${org}::${name}`). Callers are expected to
+ * invoke this ONCE, only for the distinct (serverId,org) pairs actually
+ * present in whatever result set they already have -- not an account's whole
+ * reachable fleet -- and only the first time an attribute-based refinement is
+ * actually used, caching the result thereafter.
+ */
+export async function loadCollectorNodeAttributes(
+  scopes: ReadonlyArray<{ serverId: string; serverName: string; org: string }>,
+  audit: CollectorAuditContext,
+): Promise<NodeAttributesResult> {
+  if (scopes.length === 0) return { attributesByKey: new Map(), failedScopes: [] };
+  const { succeeded, failed, byCollectorId, serverNameOf } = await fetchRawNodesByScope(scopes, audit);
+
+  const attributesByKey = new Map<string, unknown>();
+  for (const outcome of succeeded) {
+    const entry = byCollectorId.get(outcome.serverId); // outcome.serverId holds the collector's own id, see fetchRawNodesByScope
+    if (!entry) continue;
+    for (const serverId of entry.serverIds) {
+      for (const n of outcome.data) {
+        attributesByKey.set(`${serverId}::${n.Org}::${n.Name}`, n.Attributes ?? null);
+      }
+    }
+  }
+
+  return { attributesByKey, failedScopes: buildFailedScopes(failed, byCollectorId, serverNameOf) };
 }
